@@ -33,6 +33,7 @@ export default function MailSettingsPage() {
     const microsoftResult = new URLSearchParams(window.location.search).get("microsoft");
     const microsoftErrorReason = new URLSearchParams(window.location.search).get("reason");
     const [form, setForm] = useState(initialForm);
+    const isGmailSmtp = form.host.trim().toLowerCase() === "smtp.gmail.com";
     const [settings, setSettings] = useState<MailSettings | null>(null);
     const [microsoftClientId, setMicrosoftClientId] = useState("");
     const [microsoftClientSecret, setMicrosoftClientSecret] = useState("");
@@ -318,6 +319,13 @@ export default function MailSettingsPage() {
                     </label>
                     <div className="sm:col-span-2"><button disabled={saving} className="rounded-lg bg-slate-900 px-5 py-2.5 font-semibold text-white disabled:opacity-60">{saving ? "Guardando…" : "Guardar configuración"}</button></div>
                 </form>
+                {isGmailSmtp && (
+                    <aside className="mt-4 rounded-lg bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                        <p className="font-semibold">Configuración recomendada para Gmail</p>
+                        <p>Usa <code>smtp.gmail.com</code>, puerto <code>587</code> con STARTTLS, la dirección completa de Gmail como usuario y una contraseña de aplicación de Google (requiere verificación en dos pasos). El usuario SMTP y el correo remitente deben ser exactamente la misma cuenta Gmail.</p>
+                        <p className="mt-2">Google firma los mensajes salientes de Gmail con DKIM. No existe una librería que garantice evitar la carpeta de spam; también influyen la reputación y el contenido del mensaje. Si usas Google Workspace con dominio propio, activa DKIM en la consola de administración y publica el registro DNS que Google te indique.</p>
+                    </aside>
+                )}
             </section>
             <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="font-semibold text-slate-900">Probar conexión</h2>

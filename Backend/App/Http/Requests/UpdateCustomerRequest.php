@@ -7,6 +7,14 @@ use Illuminate\Validation\Rule;
 
 class UpdateCustomerRequest extends FormRequest
 {
+    public function messages(): array
+    {
+        return [
+            'phone.regex' => 'El teléfono debe contener exactamente 10 dígitos.',
+            'contact_phone.regex' => 'El teléfono de contacto debe contener exactamente 10 dígitos.',
+        ];
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -44,8 +52,7 @@ class UpdateCustomerRequest extends FormRequest
 
             'phone' => [
                 'nullable',
-                'string',
-                'max:30',
+                'regex:/^\d{10}$/',
             ],
 
             'address' => [
@@ -68,8 +75,7 @@ class UpdateCustomerRequest extends FormRequest
 
             'contact_phone' => [
                 'nullable',
-                'string',
-                'max:30',
+                'regex:/^\d{10}$/',
             ],
 
             'notes' => [

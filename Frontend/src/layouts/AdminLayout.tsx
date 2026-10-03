@@ -101,6 +101,13 @@ function AdminLayout({
         },
 
         {
+            name: "Firma electrónica",
+            path: "/admin/firma-electronica",
+            icon: "✍️",
+            roles: ["admin", "gerente"],
+        },
+
+        {
             name: "Órdenes de trabajo",
             path: "/admin/ordenes",
             icon: "🔧",

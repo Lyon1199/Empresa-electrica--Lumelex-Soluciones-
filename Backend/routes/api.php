@@ -4,15 +4,16 @@ use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\DailyReportController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\DepositReceiptController;
+use App\Http\Controllers\Api\Admin\ElectronicSignatureSettingsController;
 use App\Http\Controllers\Api\Admin\FinanceController;
 use App\Http\Controllers\Api\Admin\InventoryProductController;
 use App\Http\Controllers\Api\Admin\MailSettingsController;
 use App\Http\Controllers\Api\Admin\ProjectController;
 use App\Http\Controllers\Api\Admin\ProjectMaterialController;
 use App\Http\Controllers\Api\Admin\QuotationController;
+use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\WorkerController;
 use App\Http\Controllers\Api\Admin\WorkOrderController;
-use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Auth\CustomerPasswordController;
 use App\Http\Controllers\Api\Customer\CustomerProjectController;
 use App\Http\Controllers\Api\Worker\DailyReportController as WorkerDailyReportController;
@@ -241,6 +242,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/microsoft/app', [MailSettingsController::class, 'updateMicrosoftApp']);
         Route::post('/microsoft/connect', [MailSettingsController::class, 'connectMicrosoft']);
         Route::put('/microsoft/activate', [MailSettingsController::class, 'useMicrosoft']);
+    });
+
+    Route::middleware('role:admin,gerente')->prefix('admin/electronic-signature-settings')->group(function () {
+        Route::get('/', [ElectronicSignatureSettingsController::class, 'show']);
+        Route::post('/', [ElectronicSignatureSettingsController::class, 'update']);
     });
 
     Route::middleware('role:admin')->prefix('admin/users')->group(function () {

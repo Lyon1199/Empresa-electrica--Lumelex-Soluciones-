@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 class MailSettingsTest extends TestCase
@@ -78,6 +79,83 @@ class MailSettingsTest extends TestCase
             'to' => 'admin@example.test',
         ])->assertOk()
             ->assertJsonPath('message', 'Correo de prueba enviado correctamente.');
+    }
+
+    public function test_microsoft_smtp_failure_recommends_oauth_and_logs_safe_connection_details(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+        $this->putJson('/api/admin/mail-settings', [
+            'host' => 'smtp.office365.com',
+            'port' => 587,
+            'scheme' => 'smtp',
+            'username' => 'mailer@example.test',
+            'password' => 'smtp-application-secret',
+            'from_address' => 'quotes@example.test',
+            'from_name' => 'Lumelex',
+        ])->assertOk();
+
+        Mail::shouldReceive('mailer')
+            ->once()
+            ->with('configured-smtp')
+            ->andThrow(new TransportException('Connection to "smtp.office365.com:587" timed out.'));
+        Mail::shouldReceive('purge')->twice()->with('configured-smtp');
+
+        $this->postJson('/api/admin/mail-settings/test', [
+            'to' => 'admin@example.test',
+        ])->assertStatus(502)
+            ->assertJsonPath(
+                'message',
+                'Microsoft no completó el envío SMTP. En Administración → Correo saliente, conecta la cuenta desde “Cuenta Microsoft” y actívala para usar OAuth. Si necesitas SMTP, confirma que SMTP AUTH esté habilitado para el buzón y la organización.'
+            );
+    }
+
+    public function test_gmail_smtp_failure_explains_application_password_requirements(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+        $this->putJson('/api/admin/mail-settings', [
+            'host' => 'smtp.gmail.com',
+            'port' => 587,
+            'scheme' => 'smtp',
+            'username' => 'mailer@gmail.com',
+            'password' => 'gmail-app-password',
+            'from_address' => 'mailer@gmail.com',
+            'from_name' => 'Lumelex',
+        ])->assertOk();
+
+        Mail::shouldReceive('mailer')
+            ->once()
+            ->with('configured-smtp')
+            ->andThrow(new TransportException('Connection to "smtp.gmail.com:587" timed out.'));
+        Mail::shouldReceive('purge')->twice()->with('configured-smtp');
+
+        $this->postJson('/api/admin/mail-settings/test', [
+            'to' => 'admin@example.test',
+        ])->assertStatus(502)
+            ->assertJsonPath(
+                'message',
+                'Gmail no completó el envío SMTP. Usa smtp.gmail.com con STARTTLS/587, la dirección completa de Gmail como usuario y una contraseña de aplicación de Google (requiere verificación en dos pasos).'
+            );
+    }
+
+    public function test_gmail_smtp_requires_authenticated_account_as_sender(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+
+        $this->putJson('/api/admin/mail-settings', [
+            'host' => 'smtp.gmail.com',
+            'port' => 587,
+            'scheme' => 'smtp',
+            'username' => 'mailer@gmail.com',
+            'password' => 'gmail-app-password',
+            'from_address' => 'different@example.com',
+            'from_name' => 'Lumelex',
+        ])->assertUnprocessable()
+            ->assertJsonPath(
+                'message',
+                'Para Gmail, el usuario SMTP y el correo remitente deben ser la misma dirección de Gmail.'
+            );
+
+        $this->assertDatabaseMissing('mail_settings', ['id' => 1]);
     }
 
     public function test_admin_can_connect_a_microsoft_account_and_store_tokens_encrypted(): void

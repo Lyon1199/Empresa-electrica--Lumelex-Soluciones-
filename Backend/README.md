@@ -92,7 +92,7 @@ El módulo inicial registra cuentas por cobrar, cuentas por pagar y gastos, con 
 | `POST /api/finance/transactions` | admin, gerente, contabilidad | Registra tipo, descripción, categoría, valor, fecha, vencimiento opcional y proyecto opcional. |
 | `PATCH /api/finance/transactions/{id}/status` | admin, gerente, contabilidad | Marca un pendiente como `paid` (requiere `payment_method`: `cash`, `bank_transfer`, `card` u `other`) o `cancelled`. |
 
-Esta primera fase es un registro financiero interno: no constituye un libro contable ni emite comprobantes tributarios. No integra firma electrónica, XML/RIDE ni servicios del SRI, y no crea todavía proveedores, conciliación bancaria, pagos parciales o reversos contables. La integración tributaria y la importación de XML deben implementarse aparte, con validaciones y requisitos oficiales correspondientes. Los reportes diarios de trabajadores son un módulo separado y se mantienen sin cambios.
+Esta primera fase es un registro financiero interno: no constituye un libro contable ni emite comprobantes tributarios. No crea todavía proveedores, conciliación bancaria, pagos parciales o reversos contables. Los reportes diarios de trabajadores son un módulo separado y se mantienen sin cambios.
 
 ## Envío de cotizaciones por correo
 
@@ -105,7 +105,13 @@ Esta primera fase es un registro financiero interno: no constituye un libro cont
 
 La configuración se administra en **Administración → Correo saliente**; los datos se almacenan en la base de datos y la contraseña SMTP queda cifrada con `APP_KEY`. Guarda los datos y usa **Enviar prueba** antes de enviar una cotización. El `.env` de producción debe tener un `APP_KEY` estable: rotarlo sin volver a guardar la configuración impedirá descifrar la contraseña SMTP.
 
-Usa credenciales SMTP de aplicación. Gmail requiere contraseña de aplicación y verificación en dos pasos; Microsoft 365 y otros proveedores tienen sus propios hosts/puertos. El estado confirma que el servidor de correo aceptó el mensaje, no que haya llegado a la bandeja ni que el destinatario lo haya leído. La cotización debe tener un correo asociado antes de enviarse.
+El backend ya usa Symfony Mailer mediante Laravel; agregar otro paquete no puede garantizar que los mensajes lleguen a la bandeja principal. Para una cuenta Gmail personal usa `smtp.gmail.com`, puerto `587` con STARTTLS, la dirección completa como usuario y una contraseña de aplicación de Google (con verificación en dos pasos); el remitente debe ser esa misma cuenta. Google firma los mensajes enviados desde Gmail con DKIM. Si se usa Google Workspace con dominio propio, configura DKIM desde la consola de administración y publica el registro DNS generado por Google; SPF y DMARC también deben estar configurados para el dominio. Para Microsoft 365/Outlook se recomienda **Cuenta Microsoft** con OAuth; SMTP requiere que SMTP AUTH esté habilitado para el buzón y la organización. La entrega también depende de la reputación del remitente y del contenido: una prueba exitosa solo confirma que el proveedor aceptó el mensaje, no que llegó a la bandeja principal o que el destinatario lo leyó.
+
+## Firma del gerente
+
+**Administración → Firma electrónica** conserva cifrados con `APP_KEY` el certificado personal `.p12`/`.pfx` del gerente y su contraseña, y permite revisar la identidad y vencimiento leídos del certificado. La migración copia los datos de certificado previamente guardados en la antigua configuración SRI para no perderlos. El gerente y los administradores pueden administrar esta configuración.
+
+Las cotizaciones incluyen únicamente una representación visual del nombre **Alex Lucas**; no es una firma digital ni certificada. El certificado queda preparado para futuras funciones, pero actualmente no se aplica a documentos. Los comprobantes ni integraciones del SRI no están disponibles en la aplicación. La migración histórica conserva las tablas y registros SRI existentes en la base de datos, pero ya no hay rutas ni pantallas para utilizarlos.
 
 ## Importación de cotizaciones
 

@@ -263,8 +263,11 @@ function Customers() {
                 error
             );
 
+            const validationErrors = error?.response?.data?.errors;
             setError(
-                error?.response?.data?.message ||
+                validationErrors
+                    ? Object.values(validationErrors).flat().join(" ")
+                    : error?.response?.data?.message ||
                 "No se pudo guardar el cliente."
             );
 
@@ -535,15 +538,21 @@ function Customers() {
                             </label>
 
                             <input
+                                type="tel"
+                                inputMode="numeric"
+                                maxLength={10}
+                                pattern="[0-9]{10}"
+                                title="Ingresa exactamente 10 dígitos."
                                 value={form.phone}
                                 onChange={(e) =>
                                     handleChange(
                                         "phone",
-                                        e.target.value
+                                        e.target.value.replace(/\D/g, "").slice(0, 10)
                                     )
                                 }
                                 className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-amber-500"
                             />
+                            <p className="mt-1 text-xs text-slate-500">Opcional; si lo ingresas, debe tener exactamente 10 dígitos.</p>
 
                         </div>
 
@@ -623,15 +632,21 @@ function Customers() {
                             </label>
 
                             <input
+                                type="tel"
+                                inputMode="numeric"
+                                maxLength={10}
+                                pattern="[0-9]{10}"
+                                title="Ingresa exactamente 10 dígitos."
                                 value={form.contact_phone}
                                 onChange={(e) =>
                                     handleChange(
                                         "contact_phone",
-                                        e.target.value
+                                        e.target.value.replace(/\D/g, "").slice(0, 10)
                                     )
                                 }
                                 className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-amber-500"
                             />
+                            <p className="mt-1 text-xs text-slate-500">Opcional; si lo ingresas, debe tener exactamente 10 dígitos.</p>
 
                         </div>
 

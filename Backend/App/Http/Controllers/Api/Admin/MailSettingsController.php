@@ -175,6 +175,14 @@ class MailSettingsController extends Controller
             'from_name' => ['required', 'string', 'max:150'],
         ]);
 
+        if (strtolower(trim($data['host'])) === 'smtp.gmail.com'
+            && (! filled($data['username'] ?? null)
+                || strcasecmp(trim($data['username']), trim($data['from_address'])) !== 0)) {
+            return response()->json([
+                'message' => 'Para Gmail, el usuario SMTP y el correo remitente deben ser la misma dirección de Gmail.',
+            ], 422);
+        }
+
         $settings = MailSetting::query()->find(1) ?? new MailSetting(['id' => 1]);
         $settings->id = 1;
         $settings->fill([
@@ -228,14 +236,39 @@ class MailSettingsController extends Controller
                 }
             );
         } catch (Throwable $exception) {
+            $reason = strtolower($exception->getMessage());
+            $timedOut = str_contains($reason, 'timed out')
+                || str_contains($reason, 'timeout');
+            $authenticationFailed = in_array((int) $exception->getCode(), [530, 535], true)
+                || str_contains($reason, 'failed to authenticate');
+            $isMicrosoftSmtp = in_array(strtolower($settings->host), [
+                'smtp.office365.com',
+                'smtp-mail.outlook.com',
+            ], true);
+            $isGmailSmtp = strtolower($settings->host) === 'smtp.gmail.com';
+
             Log::error('No se pudo enviar el correo de prueba de Lumelex.', [
                 'exception' => $exception::class,
+                'reason' => $timedOut
+                    ? 'timeout'
+                    : ($authenticationFailed ? 'authentication_failed' : 'transport_error'),
+                'host' => $settings->host,
+                'port' => $settings->port,
+                'scheme' => $settings->scheme,
             ]);
 
             return response()->json([
                 'message' => $settings->provider === 'microsoft'
                     ? 'Falló el envío con Microsoft. Vuelve a conectar la cuenta y confirma que autorizaste el permiso Mail.Send.'
-                    : 'Falló la conexión de correo. Verifica host, puerto, seguridad y credenciales SMTP.',
+                    : ($isMicrosoftSmtp
+                        ? 'Microsoft no completó el envío SMTP. En Administración → Correo saliente, conecta la cuenta desde “Cuenta Microsoft” y actívala para usar OAuth. Si necesitas SMTP, confirma que SMTP AUTH esté habilitado para el buzón y la organización.'
+                        : ($isGmailSmtp
+                            ? 'Gmail no completó el envío SMTP. Usa smtp.gmail.com con STARTTLS/587, la dirección completa de Gmail como usuario y una contraseña de aplicación de Google (requiere verificación en dos pasos).'
+                            : ($authenticationFailed
+                                ? 'El servidor SMTP rechazó la autenticación. Verifica el usuario y la contraseña de aplicación.'
+                                : ($timedOut
+                                    ? "El servidor SMTP {$settings->host}:{$settings->port} no respondió a tiempo. Comprueba host, puerto y que el proveedor permita conexiones SMTP desde el servidor."
+                                    : 'No se pudo completar la conexión SMTP. Verifica host, puerto, seguridad (TLS/SSL) y credenciales.')))),
             ], 502);
         } finally {
             Mail::purge('configured-smtp');
@@ -258,7 +291,7 @@ class MailSettingsController extends Controller
                 'port' => $settings->port,
                 'username' => $settings->username,
                 'password' => $password,
-                'timeout' => 15,
+                'timeout' => 3,
                 'local_domain' => parse_url((string) config('app.url'), PHP_URL_HOST),
             ],
         ]);

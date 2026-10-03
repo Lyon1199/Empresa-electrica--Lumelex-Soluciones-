@@ -290,10 +290,14 @@ export const generateQuotationPdfBlob = async (quotation: Quotation): Promise<Bl
     pdf.setLineWidth(0.3);
     pdf.line(margin + 8, y + 14, margin + 72, y + 14);
     pdf.line(pageWidth - margin - 72, y + 14, pageWidth - margin - 8, y + 14);
+    pdf.setFont("times", "italic");
+    pdf.setFontSize(17);
+    pdf.setTextColor(...navy);
+    pdf.text("Alex Lucas", margin + 40, y + 10, { align: "center" });
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(...slate);
-    pdf.text("ELABORADO POR LUMELEX SAS", margin + 40, y + 19, { align: "center" });
+    pdf.text("Alex Lucas · Gerente", margin + 40, y + 19, { align: "center" });
     pdf.text("ACEPTACIÓN DEL CLIENTE", pageWidth - margin - 40, y + 19, { align: "center" });
 
     const pageCount = pdf.getNumberOfPages();
