@@ -78,9 +78,6 @@ export const getAuthenticatedUser = async () => {
 export const logout = async () => {
 
     try {
-
-        await getCsrfCookie();
-
         const response = await client.post(
             "/logout"
         );

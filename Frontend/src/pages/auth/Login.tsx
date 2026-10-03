@@ -83,12 +83,6 @@ function Login() {
             });
 
 
-            console.log(
-                "Login exitoso:",
-                response
-            );
-
-
             const user = response.user;
             const roles: string[] = user?.roles ?? [];
             navigate(
