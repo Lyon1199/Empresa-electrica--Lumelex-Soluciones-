@@ -5,6 +5,13 @@ use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Laravel\Sanctum\Http\Middleware\AuthenticateSession;
 use Laravel\Sanctum\Sanctum;
 
+$statefulDomains = explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
+    '%s%s',
+    'localhost,localhost:3000,localhost:5173,127.0.0.1,127.0.0.1:5173,127.0.0.1:8000,::1',
+    Sanctum::currentApplicationUrlWithPort(),
+)));
+$frontendHost = parse_url((string) env('FRONTEND_URL', ''), PHP_URL_HOST);
+
 return [
 
     /*
@@ -18,12 +25,11 @@ return [
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s',
-        'localhost,localhost:3000,localhost:5173,127.0.0.1,127.0.0.1:5173,127.0.0.1:8000,::1',
-        Sanctum::currentApplicationUrlWithPort(),
-        // Sanctum::currentRequestHost(),
-    ))),
+    'stateful' => array_values(array_unique(array_filter([
+        ...array_map('trim', $statefulDomains),
+        $frontendHost,
+        'empresa-electrica-lumelex-soluciones-tu2z-git-main-lyon1199.vercel.app',
+    ]))),
 
     /*
     |--------------------------------------------------------------------------
