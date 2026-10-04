@@ -7,6 +7,19 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Despliegue del backend en Vercel
+
+Configura el proyecto de Vercel con **Root Directory** `Backend` para que use `Backend/vercel.json` y Composer instale las dependencias de Laravel. Define las variables de producción en Vercel, nunca en el repositorio:
+
+- `APP_KEY`, `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`
+- `DB_URL` con la URL de Neon
+- `SESSION_DRIVER=database`, `SESSION_DOMAIN` para el dominio compartido, `SESSION_SECURE_COOKIE=true`
+- `CACHE_STORE=database`, `LOG_CHANNEL=stderr`, `VIEW_COMPILED_PATH=/tmp/views`
+- `CORS_ALLOWED_ORIGINS` con el origen exacto del frontend, sin `/`
+- `SANCTUM_STATEFUL_DOMAINS` con los hosts del frontend separados por comas, sin protocolo ni espacios
+
+Para autenticación Sanctum con cookies, asigna dominios propios bajo el mismo dominio registrable al frontend y backend (por ejemplo, `app.empresa.com` y `api.empresa.com`) y establece `SESSION_DOMAIN=.empresa.com`. Los dominios `*.vercel.app` del frontend y backend son sitios distintos y no permiten compartir de forma fiable la cookie de sesión. En Vercel, configura `VITE_API_URL` con el origen HTTPS del backend y vuelve a desplegar el frontend.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

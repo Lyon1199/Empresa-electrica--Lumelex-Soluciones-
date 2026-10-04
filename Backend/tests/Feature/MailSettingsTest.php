@@ -53,6 +53,24 @@ class MailSettingsTest extends TestCase
         $this->assertSame($saved->encrypted_password, MailSetting::findOrFail(1)->encrypted_password);
     }
 
+    public function test_mail_settings_reject_an_invalid_smtp_host(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+
+        $this->putJson('/api/admin/mail-settings', [
+            'host' => 'not a host!',
+            'port' => 587,
+            'scheme' => 'smtp',
+            'username' => 'mailer@example.test',
+            'password' => 'smtp-application-secret',
+            'from_address' => 'quotes@example.test',
+            'from_name' => 'Lumelex',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('host');
+
+        $this->assertDatabaseMissing('mail_settings', ['id' => 1]);
+    }
+
     public function test_only_admins_can_configure_outgoing_mail(): void
     {
         $this->actingAs($this->createUserWithRole('gerente'));
@@ -134,6 +152,34 @@ class MailSettingsTest extends TestCase
             ->assertJsonPath(
                 'message',
                 'Gmail no completó el envío SMTP. Usa smtp.gmail.com con STARTTLS/587, la dirección completa de Gmail como usuario y una contraseña de aplicación de Google (requiere verificación en dos pasos).'
+            );
+    }
+
+    public function test_gmail_authentication_failure_identifies_rejected_app_password(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+        $this->putJson('/api/admin/mail-settings', [
+            'host' => 'smtp.gmail.com',
+            'port' => 465,
+            'scheme' => 'smtps',
+            'username' => 'mailer@gmail.com',
+            'password' => 'gmail-app-password',
+            'from_address' => 'mailer@gmail.com',
+            'from_name' => 'Lumelex',
+        ])->assertOk();
+
+        Mail::shouldReceive('mailer')
+            ->once()
+            ->with('configured-smtp')
+            ->andThrow(new TransportException('Failed to authenticate with response code 535.'));
+        Mail::shouldReceive('purge')->twice()->with('configured-smtp');
+
+        $this->postJson('/api/admin/mail-settings/test', [
+            'to' => 'admin@example.test',
+        ])->assertStatus(502)
+            ->assertJsonPath(
+                'message',
+                'Google rechazó el usuario o la contraseña (535). Reemplaza la contraseña guardada por una contraseña de aplicación de Google, vuelve a guardar y prueba otra vez. Requiere verificación en dos pasos; la contraseña habitual de Gmail no sirve.'
             );
     }
 

@@ -166,7 +166,12 @@ class MailSettingsController extends Controller
     public function update(Request $request)
     {
         $data = $request->validate([
-            'host' => ['required', 'string', 'max:255'],
+            'host' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/\A(?=.{1,253}\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*\z/',
+            ],
             'port' => ['required', 'integer', 'between:1,65535'],
             'scheme' => ['required', 'in:smtp,smtps'],
             'username' => ['nullable', 'string', 'max:255'],
@@ -263,7 +268,9 @@ class MailSettingsController extends Controller
                     : ($isMicrosoftSmtp
                         ? 'Microsoft no completó el envío SMTP. En Administración → Correo saliente, conecta la cuenta desde “Cuenta Microsoft” y actívala para usar OAuth. Si necesitas SMTP, confirma que SMTP AUTH esté habilitado para el buzón y la organización.'
                         : ($isGmailSmtp
-                            ? 'Gmail no completó el envío SMTP. Usa smtp.gmail.com con STARTTLS/587, la dirección completa de Gmail como usuario y una contraseña de aplicación de Google (requiere verificación en dos pasos).'
+                            ? ($authenticationFailed
+                                ? 'Google rechazó el usuario o la contraseña (535). Reemplaza la contraseña guardada por una contraseña de aplicación de Google, vuelve a guardar y prueba otra vez. Requiere verificación en dos pasos; la contraseña habitual de Gmail no sirve.'
+                                : 'Gmail no completó el envío SMTP. Usa smtp.gmail.com, puerto 587 con STARTTLS o puerto 465 con SSL, la dirección completa de Gmail como usuario y una contraseña de aplicación de Google.')
                             : ($authenticationFailed
                                 ? 'El servidor SMTP rechazó la autenticación. Verifica el usuario y la contraseña de aplicación.'
                                 : ($timedOut
