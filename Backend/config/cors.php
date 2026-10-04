@@ -5,15 +5,12 @@ return [
     'paths' => [
         'api/*',
         'sanctum/csrf-cookie',
-        'login',
-        'logout',
-        'user',
     ],
 
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        env('FRONTEND_URL'),
+        'https://empresa-electrica-lumelex-soluciones-tu2z-git-main-lyon1199.vercel.app',
     ],
 
     'allowed_origins_patterns' => [],
