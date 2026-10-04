@@ -7,7 +7,9 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
 {
@@ -89,6 +91,44 @@ class UserController extends Controller
                 'total' => $users->total(),
             ],
         ]);
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email:rfc', 'max:254', 'unique:users,email'],
+            'phone' => ['nullable', 'regex:/^\d{10}$/'],
+            'password' => ['required', 'string', Password::min(10)->letters()->numbers()],
+            'role' => ['required', Rule::in(['gerente', 'contabilidad', 'bodega', 'supervisor'])],
+        ]);
+
+        $role = Role::query()
+            ->where('slug', $data['role'])
+            ->where('active', true)
+            ->firstOrFail();
+
+        $user = DB::transaction(function () use ($data, $role) {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'phone' => $data['phone'] ?? null,
+                'password' => Hash::make($data['password']),
+            ]);
+            $user->roles()->sync([$role->id]);
+
+            return $user;
+        });
+
+        return response()->json([
+            'message' => 'Cuenta creada correctamente.',
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $role->slug,
+            ],
+        ], 201);
     }
 
     public function updateRole(Request $request, User $user)

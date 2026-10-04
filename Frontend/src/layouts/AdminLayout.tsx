@@ -205,6 +205,8 @@ function AdminLayout({
                     left-0
                     top-0
                     z-40
+                    flex
+                    flex-col
                     h-screen
                     bg-slate-900
                     text-white
@@ -284,6 +286,9 @@ function AdminLayout({
                 <nav
                     className="
                         space-y-1
+                        min-h-0
+                        flex-1
+                        overflow-y-auto
                         p-3
                     "
                 >
@@ -359,8 +364,7 @@ function AdminLayout({
 
                 <div
                     className="
-                        absolute
-                        bottom-0
+                        shrink-0
                         w-full
                         border-t
                         border-slate-800

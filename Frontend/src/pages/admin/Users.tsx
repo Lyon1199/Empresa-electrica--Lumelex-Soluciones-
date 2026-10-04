@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { isAxiosError, isCancel } from "axios";
 import { getAuthenticatedUser } from "../../services/authService";
 import {
+    createUser,
     getUsers,
     updateUserRole,
     type ManagedRole,
@@ -18,6 +19,14 @@ const categories: { label: string; value: UserCategory }[] = [
     { label: "Personal", value: "staff" },
     { label: "Sin rol", value: "unassigned" },
 ];
+
+const initialAccountForm = {
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+    role: "bodega" as "gerente" | "contabilidad" | "bodega" | "supervisor",
+};
 
 function Users() {
     const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -35,6 +44,8 @@ function Users() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const [accountForm, setAccountForm] = useState(initialAccountForm);
+    const [creatingAccount, setCreatingAccount] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -113,6 +124,32 @@ function Users() {
         }
     };
 
+    const submitAccount = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setCreatingAccount(true);
+        setError("");
+        setNotice("");
+        try {
+            await createUser({
+                ...accountForm,
+                name: accountForm.name.trim(),
+                email: accountForm.email.trim(),
+                phone: accountForm.phone.trim() || undefined,
+            });
+            setAccountForm(initialAccountForm);
+            setNotice("Cuenta creada. Ya puede iniciar sesión con el correo y la contraseña asignada.");
+            setRefresh((value) => value + 1);
+        } catch (cause: unknown) {
+            setError(isAxiosError<{ message?: string; errors?: Record<string, string[]> }>(cause)
+                ? Object.values(cause.response?.data?.errors ?? {}).flat().join(" ")
+                    || cause.response?.data?.message
+                    || "No se pudo crear la cuenta."
+                : "No se pudo crear la cuenta.");
+        } finally {
+            setCreatingAccount(false);
+        }
+    };
+
     return (
         <main className="space-y-6">
             <header>
@@ -121,6 +158,27 @@ function Users() {
                     Consulta las cuentas por tipo y administra sus roles.
                 </p>
             </header>
+
+            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div>
+                    <h2 className="font-semibold text-slate-900">Crear cuenta de personal</h2>
+                    <p className="mt-1 text-sm text-slate-600">Bodega, contabilidad, gerencia o supervisión. El usuario podrá iniciar sesión de inmediato.</p>
+                </div>
+                <form onSubmit={(event) => void submitAccount(event)} className="grid gap-3 sm:grid-cols-2">
+                    <input required maxLength={255} aria-label="Nombre" placeholder="Nombre completo" value={accountForm.name} onChange={(event) => setAccountForm({ ...accountForm, name: event.target.value })} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" />
+                    <input required type="email" maxLength={254} aria-label="Correo" placeholder="Correo" value={accountForm.email} onChange={(event) => setAccountForm({ ...accountForm, email: event.target.value })} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" />
+                    <input type="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} aria-label="Teléfono" placeholder="Teléfono (10 dígitos, opcional)" value={accountForm.phone} onChange={(event) => setAccountForm({ ...accountForm, phone: event.target.value.replace(/\D/g, "").slice(0, 10) })} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" />
+                    <input required type="password" minLength={10} aria-label="Contraseña inicial" autoComplete="new-password" placeholder="Contraseña (mínimo 10 caracteres)" value={accountForm.password} onChange={(event) => setAccountForm({ ...accountForm, password: event.target.value })} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" />
+                    <select aria-label="Rol de cuenta" value={accountForm.role} onChange={(event) => setAccountForm({ ...accountForm, role: event.target.value as typeof accountForm.role })} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                        <option value="bodega">Bodega</option>
+                        <option value="contabilidad">Contabilidad</option>
+                        <option value="gerente">Gerencia</option>
+                        <option value="supervisor">Supervisor</option>
+                    </select>
+                    <button type="submit" disabled={creatingAccount} className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-60">{creatingAccount ? "Creando..." : "Crear cuenta"}</button>
+                </form>
+                <p className="text-xs text-slate-500">El acceso de clientes al portal se crea al aceptar su cotización; los clientes sin proyecto todavía no son cuentas de usuario.</p>
+            </section>
 
             <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap gap-2" aria-label="Clasificar usuarios">

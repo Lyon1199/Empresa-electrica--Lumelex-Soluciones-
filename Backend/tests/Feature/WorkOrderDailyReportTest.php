@@ -27,8 +27,30 @@ class WorkOrderDailyReportTest extends TestCase
         parent::setUp();
 
         foreach (['admin', 'gerente', 'contabilidad', 'supervisor', 'tecnico', 'cliente'] as $slug) {
-            Role::create(['slug' => $slug, 'name' => ucfirst($slug), 'active' => true]);
+            Role::firstOrCreate(
+                ['slug' => $slug],
+                ['name' => ucfirst($slug), 'active' => true]
+            );
         }
+    }
+
+    public function test_worker_creation_restores_a_missing_default_role(): void
+    {
+        $admin = $this->createUserWithRole('admin');
+        $this->authenticateAs($admin);
+        Role::where('slug', 'tecnico')->delete();
+
+        $this->postJson('/api/workers', [
+            'name' => 'Trabajador nuevo',
+            'email' => 'nuevo.worker@example.test',
+            'identification' => '0102030405',
+        ])->assertCreated()
+            ->assertJsonPath('data.role', 'tecnico');
+
+        $this->assertDatabaseHas('roles', [
+            'slug' => 'tecnico',
+            'active' => true,
+        ]);
     }
 
     public function test_admin_can_create_worker_and_assign_them_to_existing_work_order(): void

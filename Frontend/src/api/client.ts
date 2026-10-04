@@ -1,9 +1,11 @@
 import axios from "axios";
 
-const API_ROOT = (import.meta.env.VITE_API_URL ?? "")
+const configuredApiRoot = (import.meta.env.VITE_API_URL ?? "")
     .trim()
     .replace(/\/+$/, "")
     .replace(/\/api$/i, "");
+const API_ROOT = configuredApiRoot
+    || (import.meta.env.PROD ? "https://lumelex-backend.vercel.app" : "");
 
 const client = axios.create({
     baseURL: `${API_ROOT}/api`,

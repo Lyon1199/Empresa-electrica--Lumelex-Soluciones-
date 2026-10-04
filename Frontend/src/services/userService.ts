@@ -30,6 +30,14 @@ export interface UsersPage {
     };
 }
 
+export interface CreateUserPayload {
+    name: string;
+    email: string;
+    phone?: string;
+    password: string;
+    role: "gerente" | "contabilidad" | "bodega" | "supervisor";
+}
+
 export async function getUsers(
     filters: { category: UserCategory; role: string; search: string; page: number },
     signal?: AbortSignal,
@@ -44,6 +52,10 @@ export async function getUsers(
         signal,
     });
     return response.data as UsersPage;
+}
+
+export async function createUser(payload: CreateUserPayload): Promise<void> {
+    await client.post("/admin/users", payload);
 }
 
 export async function updateUserRole(userId: number, role: string): Promise<void> {

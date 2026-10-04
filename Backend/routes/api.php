@@ -251,6 +251,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:admin')->prefix('admin/users')->group(function () {
         Route::get('/', [UserController::class, 'index']);
+        Route::post('/', [UserController::class, 'store']);
         Route::put('/{user}/role', [UserController::class, 'updateRole']);
     });
 

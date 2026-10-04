@@ -2,10 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Models\Role;
 use App\Models\Customer;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class UserManagementTest extends TestCase
@@ -39,6 +40,50 @@ class UserManagementTest extends TestCase
             ['lider_proyecto'],
             $technician->fresh()->roles()->pluck('slug')->all()
         );
+    }
+
+    public function test_admin_can_create_staff_accounts_that_can_sign_in(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+
+        foreach (['bodega', 'contabilidad'] as $roleSlug) {
+            $email = "{$roleSlug}@example.test";
+            $this->postJson('/api/admin/users', [
+                'name' => ucfirst($roleSlug),
+                'email' => $email,
+                'password' => 'SecurePass123',
+                'role' => $roleSlug,
+            ])->assertCreated()
+                ->assertJsonPath('data.role', $roleSlug);
+
+            $user = User::where('email', $email)->firstOrFail();
+            $this->assertTrue(Hash::check('SecurePass123', $user->password));
+            $this->assertTrue($user->hasRole($roleSlug));
+        }
+    }
+
+    public function test_staff_account_creation_rejects_weak_passwords_and_non_staff_roles(): void
+    {
+        $this->actingAs($this->createUserWithRole('admin'));
+
+        $payload = [
+            'name' => 'Bodega',
+            'email' => 'bodega@example.test',
+            'password' => 'short',
+            'role' => 'bodega',
+        ];
+
+        $this->postJson('/api/admin/users', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('password');
+
+        $this->postJson('/api/admin/users', [
+            ...$payload,
+            'email' => 'admin-role@example.test',
+            'password' => 'SecurePass123',
+            'role' => 'admin',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('role');
     }
 
     public function test_customer_user_shows_the_phone_saved_on_the_customer_record(): void

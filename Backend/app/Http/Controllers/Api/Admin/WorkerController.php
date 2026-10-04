@@ -39,10 +39,19 @@ class WorkerController extends Controller
         ]);
         $data['password'] = $data['identification'];
 
-        $role = Role::where('slug', $data['role'] ?? 'tecnico')->where('active', true)->first();
-        if (! $role) {
-            return response()->json(['message' => 'El rol de trabajador no está configurado.'], 500);
-        }
+        $roleSlug = $data['role'] ?? 'tecnico';
+        $roleNames = [
+            'tecnico' => ['Técnico', 'Ejecución de trabajos técnicos.'],
+            'lider_proyecto' => ['Líder de proyecto', 'Gestiona los avances y reportes de proyectos.'],
+        ];
+        $role = Role::updateOrCreate(
+            ['slug' => $roleSlug],
+            [
+                'name' => $roleNames[$roleSlug][0],
+                'description' => $roleNames[$roleSlug][1],
+                'active' => true,
+            ]
+        );
         $worker = DB::transaction(function () use ($data, $role) {
             $worker = User::create($data);
             $worker->roles()->sync([$role->id]);
