@@ -7,8 +7,10 @@ const API_ROOT = (import.meta.env.VITE_API_URL ?? "")
 
 const client = axios.create({
     baseURL: `${API_ROOT}/api`,
+
     withCredentials: true,
     withXSRFToken: true,
+
     headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
@@ -17,6 +19,7 @@ const client = axios.create({
 
 client.interceptors.response.use(
     (response) => response,
+
     (error) => {
         if (error?.response?.status === 401) {
             sessionStorage.removeItem("lumelex_authenticated");
@@ -39,6 +42,5 @@ export const getCsrfCookie = async () => {
         }
     );
 };
-
 
 export default client;
