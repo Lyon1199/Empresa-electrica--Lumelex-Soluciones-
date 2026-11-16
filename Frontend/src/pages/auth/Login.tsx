@@ -250,6 +250,30 @@ function Login() {
 
                     </div>
 
+                    <Link
+                        to="/nosotros"
+                        className="
+                            mb-7
+                            flex
+                            min-h-11
+                            items-center
+                            justify-center
+                            rounded-lg
+                            border
+                            border-amber-300
+                            bg-amber-50
+                            px-4
+                            text-sm
+                            font-semibold
+                            text-slate-800
+                            transition
+                            hover:border-amber-400
+                            hover:bg-amber-100
+                        "
+                    >
+                        Ver portal público de Lumelex
+                    </Link>
+
 
                     {/* =================================================
                         FORMULARIO
@@ -504,12 +528,6 @@ function Login() {
                             Lumelex SAS · Soluciones
                             Eléctricas e Ingeniería
                         </p>
-                        <Link
-                            to="/nosotros"
-                            className="mt-3 inline-block text-sm font-medium text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
-                        >
-                            Conoce más sobre nosotros
-                        </Link>
 
                     </div>
 

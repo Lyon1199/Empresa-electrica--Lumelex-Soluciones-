@@ -28,6 +28,7 @@ return [
     'stateful' => array_values(array_unique(array_filter([
         ...array_map('trim', $statefulDomains),
         $frontendHost,
+        'empresa-electrica-lumelex-solucione-seven.vercel.app',
         'empresa-electrica-lumelex-soluciones-tu2z-git-main-lyon1199.vercel.app',
     ]))),
 
