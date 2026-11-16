@@ -271,7 +271,7 @@ function Login() {
                             hover:bg-amber-100
                         "
                     >
-                        Ver portal público de Lumelex
+                        Nosotros
                     </Link>
 
 

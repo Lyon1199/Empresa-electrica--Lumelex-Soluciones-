@@ -4,7 +4,7 @@ const configuredApiRoot = (import.meta.env.VITE_API_URL ?? "")
     .trim()
     .replace(/\/+$/, "")
     .replace(/\/api$/i, "");
-const API_ROOT = import.meta.env.PROD ? "" : configuredApiRoot;
+const API_ROOT = import.meta.env.PROD ? window.location.origin : configuredApiRoot;
 
 const client = axios.create({
     baseURL: `${API_ROOT}/api`,

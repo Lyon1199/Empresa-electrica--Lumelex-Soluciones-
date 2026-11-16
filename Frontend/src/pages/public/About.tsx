@@ -36,34 +36,34 @@ const services = [
 
 const projectPhotos = [
     {
-        src: terminalMedidores,
-        alt: "Gabinete de medidores del Terminal de Jipijapa antes de la intervención",
-        caption: "Estado inicial del gabinete de medición",
-        stage: "Antes",
-    },
-    {
         src: terminalCableado,
         alt: "Detalle del cableado y la estructura existente del tablero",
-        caption: "Revisión de la instalación existente",
+        caption: "Condición del cableado antes de los trabajos",
         stage: "Antes",
     },
     {
-        src: terminalInstalacion,
-        alt: "Tablero eléctrico nuevo instalado junto al gabinete existente",
-        caption: "Integración del tablero durante el montaje",
-        stage: "Durante",
+        src: terminalMedidores,
+        alt: "Gabinete de medidores del Terminal de Jipijapa antes de la intervención",
+        caption: "Gabinete de medición previo a la intervención",
+        stage: "Antes",
+    },
+    {
+        src: terminalOrganizado,
+        alt: "Gabinete antiguo de medidores del Terminal de Jipijapa antes de la intervención",
+        caption: "Estado del tablero de medidores antes de la intervención",
+        stage: "Antes",
     },
     {
         src: terminalArmado,
         alt: "Tablero de distribución eléctrico en proceso de armado",
-        caption: "Armado del conjunto de distribución",
+        caption: "Armado de los componentes del nuevo tablero",
         stage: "Durante",
     },
     {
-        src: terminalOrganizado,
-        alt: "Gabinete de medidores con cableado ordenado después de los trabajos",
-        caption: "Organización de las conexiones visibles",
-        stage: "Después",
+        src: terminalInstalacion,
+        alt: "Tablero eléctrico nuevo instalado junto al gabinete existente",
+        caption: "Montaje del tablero junto al área de medición",
+        stage: "Durante",
     },
     {
         src: terminalFinal,
@@ -112,7 +112,7 @@ export default function About() {
                         to="/login"
                         className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 sm:px-5"
                     >
-                        Portal de clientes
+                        Iniciar sesión
                     </Link>
                 </nav>
             </header>
@@ -143,7 +143,7 @@ export default function About() {
                                 to="/login"
                                 className="rounded-lg border border-white/30 px-6 py-3 font-semibold text-white transition hover:bg-white/10"
                             >
-                                Ingresar al portal
+                                Mira tu proyecto
                             </Link>
                         </div>
                     </div>
