@@ -17,7 +17,7 @@ function messageFromError(error: unknown): string {
 
 export default function ElectronicSignatureSettingsPage() {
     const [settings, setSettings] = useState<ElectronicSignatureSettings | null>(null);
-    const [signerName, setSignerName] = useState("Alex Lucas");
+    const [signerName, setSignerName] = useState("Representante de LUMELEX");
     const [certificate, setCertificate] = useState<File | null>(null);
     const [certificatePassword, setCertificatePassword] = useState("");
     const [loading, setLoading] = useState(true);
@@ -136,7 +136,7 @@ export default function ElectronicSignatureSettingsPage() {
                 </form>
             </section>
             <aside className="rounded-lg bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-                Las cotizaciones muestran únicamente la firma dibujada “Alex Lucas”; no se firman con este certificado. La configuración aquí guardada no constituye una firma electrónica aplicada a un documento.
+                Las cotizaciones incluyen el espacio de firma de un representante de LUMELEX; no se firman con este certificado. La configuración aquí guardada no constituye una firma electrónica aplicada a un documento.
             </aside>
         </div>
     );

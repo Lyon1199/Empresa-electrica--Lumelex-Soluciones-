@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 
 import {
     useNavigate,
+    Link,
 } from "react-router-dom";
 
 import {
@@ -101,18 +102,34 @@ function Login() {
             );
 
 
-        } catch (error: any) {
+        } catch (error: unknown) {
 
             console.error(
                 "Error de login:",
                 error
             );
 
+            const response = typeof error === "object" && error !== null && "response" in error
+                ? (error as {
+                    response?: {
+                        status?: number;
+                        data?: { message?: unknown; errors?: Record<string, string[]> };
+                    };
+                }).response
+                : undefined;
+            const serverMessage = response?.data?.message;
 
-            setError(
-                error?.response?.data?.message ||
-                "No se pudo iniciar sesión. Verifica tus credenciales."
-            );
+            if (response?.status === 401) {
+                setError("El correo o la contraseña no coinciden.");
+            } else if (response?.status === 419) {
+                setError("La sesión de seguridad expiró. Recarga la página e inténtalo de nuevo.");
+            } else if (typeof serverMessage === "string" && serverMessage.trim()) {
+                setError(serverMessage);
+            } else if (response) {
+                setError("El servicio de acceso no pudo completar la solicitud. Inténtalo más tarde.");
+            } else {
+                setError("No se pudo conectar con el servicio de acceso. Revisa tu conexión e inténtalo de nuevo.");
+            }
 
 
         } finally {
@@ -487,6 +504,12 @@ function Login() {
                             Lumelex SAS · Soluciones
                             Eléctricas e Ingeniería
                         </p>
+                        <Link
+                            to="/nosotros"
+                            className="mt-3 inline-block text-sm font-medium text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline"
+                        >
+                            Conoce más sobre nosotros
+                        </Link>
 
                     </div>
 

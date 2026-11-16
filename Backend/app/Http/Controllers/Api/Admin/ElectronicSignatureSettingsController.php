@@ -18,7 +18,7 @@ class ElectronicSignatureSettingsController extends Controller
 
         return response()->json([
             'data' => [
-                'signer_name' => $settings?->signer_name ?? 'Alex Lucas',
+                'signer_name' => $settings?->signer_name ?? 'Representante de LUMELEX',
                 'certificate_configured' => filled($settings?->encrypted_certificate),
                 'certificate_subject' => $settings?->certificate_subject,
                 'certificate_expires_at' => $settings?->certificate_expires_at?->toISOString(),

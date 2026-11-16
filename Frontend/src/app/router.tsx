@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 
 const Login = lazy(() => import("../pages/auth/Login"));
+const About = lazy(() => import("../pages/public/About"));
 const Dashboard = lazy(() => import("../pages/admin/Dashboard"));
 const Users = lazy(() => import("../pages/admin/Users"));
 const Customers = lazy(() => import("../pages/admin/Customers/Customers"));
@@ -34,6 +35,8 @@ function Router() {
                 </div>
             }>
               <Routes>
+                <Route path="/" element={<About />} />
+                <Route path="/nosotros" element={<About />} />
 
                 {/* ==========================================
                     LOGIN
@@ -103,17 +106,6 @@ function Router() {
                 {/* ==========================================
                     RUTA PRINCIPAL
                 ========================================== */}
-
-                <Route
-                    path="/"
-                    element={
-                        <Navigate
-                            to="/login"
-                            replace
-                        />
-                    }
-                />
-
 
                 {/* ==========================================
                     CUALQUIER RUTA DESCONOCIDA

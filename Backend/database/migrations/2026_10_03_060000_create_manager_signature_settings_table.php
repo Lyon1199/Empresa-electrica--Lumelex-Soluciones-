@@ -11,7 +11,7 @@ return new class extends Migration
     {
         Schema::create('manager_signature_settings', function (Blueprint $table) {
             $table->unsignedTinyInteger('id')->primary();
-            $table->string('signer_name', 150)->default('Alex Lucas');
+            $table->string('signer_name', 150)->default('Representante de LUMELEX');
             $table->longText('encrypted_certificate')->nullable();
             $table->longText('encrypted_certificate_password')->nullable();
             $table->string('certificate_subject')->nullable();
@@ -25,7 +25,7 @@ return new class extends Migration
             if ($legacySettings && filled($legacySettings->encrypted_certificate)) {
                 DB::table('manager_signature_settings')->insert([
                     'id' => 1,
-                    'signer_name' => 'Alex Lucas',
+                    'signer_name' => 'Representante de LUMELEX',
                     'encrypted_certificate' => $legacySettings->encrypted_certificate,
                     'encrypted_certificate_password' => $legacySettings->encrypted_certificate_password,
                     'updated_by' => $legacySettings->updated_by,
