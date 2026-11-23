@@ -24,6 +24,13 @@ export interface QuotationItemPayload {
     unit_price: number;
 }
 
+export interface InternalLaborEntry {
+    role: string;
+    worker_count: number;
+    work_days: number;
+    daily_rate: number;
+}
+
 export interface QuotationPayload {
     customer_id?: number | null;
     customer_name?: string;
@@ -43,6 +50,7 @@ export interface QuotationPayload {
     internal_worker_count: number;
     internal_work_days: number;
     internal_daily_rate: number;
+    internal_labor_entries?: InternalLaborEntry[];
     items: QuotationItemPayload[];
 }
 
@@ -80,6 +88,7 @@ export interface Quotation {
     internal_work_days?: string;
     internal_daily_rate?: string;
     internal_labor_total?: string;
+    internal_labor_entries?: InternalLaborEntry[];
     items: QuotationItem[];
     created_at: string;
     updated_at: string;

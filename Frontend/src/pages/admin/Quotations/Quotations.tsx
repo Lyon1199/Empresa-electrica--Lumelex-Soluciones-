@@ -21,6 +21,7 @@ import {
     type PortalCredentials,
     type QuotationStatus,
 } from "../../../services/quotationService";
+import type { InternalLaborEntry } from "../../../services/quotationService";
 
 type ViewMode = "list" | "form" | "detail";
 
@@ -43,13 +44,19 @@ const categories: { value: QuotationItemCategory; label: string }[] = [
 
 type QuotationForm = Omit<
     QuotationPayload,
-    "discount_percent" | "tax_percent" | "internal_worker_count" | "internal_work_days" | "internal_daily_rate" | "items"
+    "discount_percent" | "tax_percent" | "internal_worker_count" | "internal_work_days" | "internal_daily_rate" | "internal_labor_entries" | "items"
 > & {
     discount_percent: string;
     tax_percent: string;
     internal_worker_count: string;
     internal_work_days: string;
     internal_daily_rate: string;
+    internal_labor_entries: Array<{
+        role: string;
+        worker_count: string;
+        work_days: string;
+        daily_rate: string;
+    }>;
     items: Array<
         Omit<QuotationPayload["items"][number], "quantity" | "unit_price"> & {
             quantity: string;
@@ -134,6 +141,10 @@ const emptyQuotation = (): QuotationForm => ({
     internal_worker_count: "1",
     internal_work_days: "1",
     internal_daily_rate: "0",
+    internal_labor_entries: [
+        { role: "Técnico", worker_count: "1", work_days: "1", daily_rate: "25" },
+        { role: "Líder", worker_count: "1", work_days: "1", daily_rate: "40" },
+    ],
     items: [emptyItem()],
 });
 
@@ -150,6 +161,14 @@ const toPayload = (form: QuotationForm): QuotationPayload => ({
     internal_daily_rate: form.internal_labor_enabled
         ? parseUserNumber(form.internal_daily_rate)
         : 0,
+    internal_labor_entries: form.internal_labor_enabled
+        ? form.internal_labor_entries.map((entry): InternalLaborEntry => ({
+            role: entry.role.trim(),
+            worker_count: parseUserNumber(entry.worker_count),
+            work_days: parseUserNumber(entry.work_days),
+            daily_rate: parseUserNumber(entry.daily_rate),
+        }))
+        : [],
     items: form.items.map((item) => ({
         ...item,
         quantity: parseUserNumber(item.quantity),
@@ -252,9 +271,14 @@ function QuotationPage() {
         [form.items]
     );
     const internalLaborTotal = form.internal_labor_enabled
-        ? parseUserNumber(form.internal_worker_count)
-            * parseUserNumber(form.internal_work_days)
-            * parseUserNumber(form.internal_daily_rate)
+        ? form.internal_labor_entries.reduce(
+            (sum, entry) =>
+                sum
+                + parseUserNumber(entry.worker_count)
+                * parseUserNumber(entry.work_days)
+                * parseUserNumber(entry.daily_rate),
+            0
+        )
         : 0;
     const subtotal = itemsSubtotal + internalLaborTotal;
     const discountAmount = subtotal * parseUserNumber(form.discount_percent) / 100;
@@ -369,6 +393,22 @@ function QuotationPage() {
             internal_worker_count: numberInputValue(item.internal_worker_count ?? 0),
             internal_work_days: numberInputValue(item.internal_work_days ?? 0),
             internal_daily_rate: numberInputValue(item.internal_daily_rate ?? 0),
+            internal_labor_entries: (item.internal_labor_entries?.length
+                ? item.internal_labor_entries
+                : [
+                    {
+                        role: "Técnico",
+                        worker_count: item.internal_worker_count ?? 1,
+                        work_days: Number(item.internal_work_days ?? 1),
+                        daily_rate: Number(item.internal_daily_rate ?? 0),
+                    },
+                ]
+            ).map((entry) => ({
+                role: entry.role,
+                worker_count: numberInputValue(entry.worker_count),
+                work_days: numberInputValue(entry.work_days),
+                daily_rate: numberInputValue(entry.daily_rate),
+            })),
             items: item.items.map(({ product_id, category, description, unit, quantity, unit_price }) => ({
                 product_id: product_id ?? null,
                 category,
@@ -443,15 +483,19 @@ function QuotationPage() {
         if (
             form.internal_labor_enabled
             && (
-                !isValidUserNumber(form.internal_worker_count)
-                || parseUserNumber(form.internal_worker_count) < 1
-                || !isValidUserNumber(form.internal_work_days)
-                || parseUserNumber(form.internal_work_days) <= 0
-                || !isValidUserNumber(form.internal_daily_rate)
-                || parseUserNumber(form.internal_daily_rate) <= 0
+                form.internal_labor_entries.length === 0
+                || form.internal_labor_entries.some((entry) =>
+                    !entry.role.trim()
+                    || !isValidUserNumber(entry.worker_count)
+                    || parseUserNumber(entry.worker_count) < 1
+                    || !isValidUserNumber(entry.work_days)
+                    || parseUserNumber(entry.work_days) <= 0
+                    || !isValidUserNumber(entry.daily_rate)
+                    || parseUserNumber(entry.daily_rate) <= 0
+                )
             )
         ) {
-            setError("Indica al menos un trabajador, días de trabajo y una tarifa diaria mayor que cero.");
+            setError("Agrega al menos una categoría de trabajador y completa cantidad, días y tarifa.");
             return;
         }
 
@@ -515,6 +559,14 @@ function QuotationPage() {
                 internal_worker_count: quotation.internal_worker_count ?? 0,
                 internal_work_days: Number(quotation.internal_work_days ?? 0),
                 internal_daily_rate: Number(quotation.internal_daily_rate ?? 0),
+                internal_labor_entries: (quotation.internal_labor_entries?.length
+                    ? quotation.internal_labor_entries
+                    : [{
+                        role: "Técnico",
+                        worker_count: quotation.internal_worker_count ?? 1,
+                        work_days: Number(quotation.internal_work_days ?? 1),
+                        daily_rate: Number(quotation.internal_daily_rate ?? 0),
+                    }]),
                 items: quotation.items.map(({ product_id, category, description, unit, quantity, unit_price }) => ({
                     product_id: product_id ?? null,
                     category,
@@ -941,50 +993,105 @@ function QuotationPage() {
                             </label>
                         </div>
                         {form.internal_labor_enabled && (
-                            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                                <label className="text-sm font-semibold text-slate-700">
-                                    Número de trabajadores *
-                                    <input
-                                        required
-                                        min="1"
-                                        max="1000"
-                                        step="1"
-                                        type="number"
-                                        value={form.internal_worker_count}
-                                        onChange={(event) => updateForm("internal_worker_count", event.target.value)}
-                                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5"
-                                    />
-                                </label>
-                                <label className="text-sm font-semibold text-slate-700">
-                                    Jornadas por trabajador *
-                                    <input
-                                        required
-                                        min="0.01"
-                                        max="10000"
-                                        step="any"
-                                        type="number"
-                                        value={form.internal_work_days}
-                                        onChange={(event) => updateForm("internal_work_days", event.target.value)}
-                                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5"
-                                    />
-                                </label>
-                                <label className="text-sm font-semibold text-slate-700">
-                                    Pago diario por trabajador (USD) *
-                                    <input
-                                        required
-                                        min="0.01"
-                                        max="100000000"
-                                        step="any"
-                                        type="number"
-                                        value={form.internal_daily_rate}
-                                        onChange={(event) => updateForm("internal_daily_rate", event.target.value)}
-                                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5"
-                                    />
-                                </label>
-                                <div className="rounded-lg border border-violet-200 bg-white p-3 text-sm sm:col-span-3">
+                            <div className="mt-4 space-y-3">
+                                {form.internal_labor_entries.map((entry, index) => (
+                                    <div key={index} className="grid gap-3 rounded-lg border border-violet-200 bg-white p-3 md:grid-cols-[minmax(160px,1.5fr)_1fr_1fr_1fr_auto]">
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            Tipo de trabajador *
+                                            <input
+                                                required
+                                                maxLength={120}
+                                                value={entry.role}
+                                                onChange={(event) => updateForm(
+                                                    "internal_labor_entries",
+                                                    form.internal_labor_entries.map((item, itemIndex) =>
+                                                        itemIndex === index ? { ...item, role: event.target.value } : item
+                                                    )
+                                                )}
+                                                placeholder="Ej. Líder, técnico, ayudante"
+                                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                                            />
+                                        </label>
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            Cantidad *
+                                            <input
+                                                required
+                                                min="1"
+                                                max="1000"
+                                                step="1"
+                                                type="number"
+                                                value={entry.worker_count}
+                                                onChange={(event) => updateForm(
+                                                    "internal_labor_entries",
+                                                    form.internal_labor_entries.map((item, itemIndex) =>
+                                                        itemIndex === index ? { ...item, worker_count: event.target.value } : item
+                                                    )
+                                                )}
+                                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                                            />
+                                        </label>
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            Jornadas *
+                                            <input
+                                                required
+                                                min="0.01"
+                                                max="10000"
+                                                step="any"
+                                                type="number"
+                                                value={entry.work_days}
+                                                onChange={(event) => updateForm(
+                                                    "internal_labor_entries",
+                                                    form.internal_labor_entries.map((item, itemIndex) =>
+                                                        itemIndex === index ? { ...item, work_days: event.target.value } : item
+                                                    )
+                                                )}
+                                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                                            />
+                                        </label>
+                                        <label className="text-sm font-semibold text-slate-700">
+                                            Pago diario (USD) *
+                                            <input
+                                                required
+                                                min="0.01"
+                                                max="100000000"
+                                                step="any"
+                                                type="number"
+                                                value={entry.daily_rate}
+                                                onChange={(event) => updateForm(
+                                                    "internal_labor_entries",
+                                                    form.internal_labor_entries.map((item, itemIndex) =>
+                                                        itemIndex === index ? { ...item, daily_rate: event.target.value } : item
+                                                    )
+                                                )}
+                                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            disabled={form.internal_labor_entries.length === 1}
+                                            onClick={() => updateForm(
+                                                "internal_labor_entries",
+                                                form.internal_labor_entries.filter((_, itemIndex) => itemIndex !== index)
+                                            )}
+                                            className="self-end rounded-lg px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-30"
+                                        >
+                                            Quitar
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => updateForm(
+                                        "internal_labor_entries",
+                                        [...form.internal_labor_entries, { role: "", worker_count: "1", work_days: "1", daily_rate: "25" }]
+                                    )}
+                                    className="rounded-lg border border-violet-300 px-4 py-2.5 text-sm font-semibold text-violet-800 hover:bg-violet-50"
+                                >
+                                    + Agregar tipo de trabajador
+                                </button>
+                                <div className="rounded-lg border border-violet-200 bg-white p-3 text-sm">
                                     <span className="text-slate-600">Costo interno calculado: </span>
                                     <strong className="text-violet-900">{money(internalLaborTotal)}</strong>
-                                    <span className="ml-2 text-xs text-slate-500">({form.internal_worker_count || 0} trabajadores × {form.internal_work_days || 0} jornadas × {money(parseUserNumber(form.internal_daily_rate))} por jornada)</span>
                                 </div>
                             </div>
                         )}

@@ -40,6 +40,11 @@ class UpdateQuotationRequest extends FormRequest
             'internal_worker_count' => ['required_if:internal_labor_enabled,true', 'integer', 'min:1', 'max:1000'],
             'internal_work_days' => ['required_if:internal_labor_enabled,true', 'numeric', 'gt:0', 'max:10000'],
             'internal_daily_rate' => ['required_if:internal_labor_enabled,true', 'numeric', 'gt:0', 'max:100000000'],
+            'internal_labor_entries' => ['nullable', 'array', 'max:100'],
+            'internal_labor_entries.*.role' => ['required', 'string', 'max:120'],
+            'internal_labor_entries.*.worker_count' => ['required', 'integer', 'min:1', 'max:1000'],
+            'internal_labor_entries.*.work_days' => ['required', 'numeric', 'gt:0', 'max:10000'],
+            'internal_labor_entries.*.daily_rate' => ['required', 'numeric', 'gt:0', 'max:100000000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.category' => [
                 'required_without:items.*.product_id',

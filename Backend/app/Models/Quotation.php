@@ -35,6 +35,7 @@ class Quotation extends Model
         'internal_work_days',
         'internal_daily_rate',
         'internal_labor_total',
+        'internal_labor_entries',
         'created_by',
     ];
 
@@ -53,6 +54,7 @@ class Quotation extends Model
         'internal_work_days' => 'decimal:2',
         'internal_daily_rate' => 'decimal:2',
         'internal_labor_total' => 'decimal:2',
+        'internal_labor_entries' => 'array',
     ];
 
     public function customer(): BelongsTo

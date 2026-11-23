@@ -323,6 +323,24 @@ class QuotationController extends Controller
     private function quotationAttributes(array $data, ?Customer $customer): array
     {
         $internalLaborEnabled = (bool) ($data['internal_labor_enabled'] ?? false);
+        $entries = $internalLaborEnabled
+            ? ($data['internal_labor_entries'] ?? [])
+            : [];
+        $workerCount = count($entries)
+            ? array_sum(array_map(
+                fn (array $entry) => (int) $entry['worker_count'],
+                $entries
+            ))
+            : ($internalLaborEnabled ? ($data['internal_worker_count'] ?? 0) : 0);
+        $workDays = count($entries)
+            ? (float) max(array_map(
+                fn (array $entry) => (float) $entry['work_days'],
+                $entries
+            ))
+            : ($internalLaborEnabled ? ($data['internal_work_days'] ?? 0) : 0);
+        $dailyRate = count($entries)
+            ? 0
+            : ($internalLaborEnabled ? ($data['internal_daily_rate'] ?? 0) : 0);
 
         return [
             'customer_id' => $customer?->id,
@@ -347,15 +365,10 @@ class QuotationController extends Controller
             'terms' => $data['terms'] ?? null,
             'currency' => 'USD',
             'internal_labor_enabled' => $internalLaborEnabled,
-            'internal_worker_count' => $internalLaborEnabled
-                ? $data['internal_worker_count']
-                : 0,
-            'internal_work_days' => $internalLaborEnabled
-                ? $data['internal_work_days']
-                : 0,
-            'internal_daily_rate' => $internalLaborEnabled
-                ? $data['internal_daily_rate']
-                : 0,
+            'internal_worker_count' => $workerCount,
+            'internal_work_days' => $workDays,
+            'internal_daily_rate' => $dailyRate,
+            'internal_labor_entries' => $entries,
         ];
     }
 
@@ -391,14 +404,22 @@ class QuotationController extends Controller
             ];
         }
 
-        $internalLaborTotal = ! empty($data['internal_labor_enabled'])
-            ? round(
-                (int) $data['internal_worker_count']
-                * (float) $data['internal_work_days']
-                * (float) $data['internal_daily_rate'],
-                2
-            )
-            : 0;
+        $internalLaborTotal = 0;
+        if (! empty($data['internal_labor_enabled'])) {
+            $entries = $data['internal_labor_entries'] ?? [];
+            if (count($entries)) {
+                foreach ($entries as $entry) {
+                    $internalLaborTotal += (int) $entry['worker_count']
+                        * (float) $entry['work_days']
+                        * (float) $entry['daily_rate'];
+                }
+            } else {
+                $internalLaborTotal = (int) $data['internal_worker_count']
+                    * (float) $data['internal_work_days']
+                    * (float) $data['internal_daily_rate'];
+            }
+            $internalLaborTotal = round($internalLaborTotal, 2);
+        }
         $subtotal = round($subtotal + $internalLaborTotal, 2);
         $discountPercent = (float) $data['discount_percent'];
         $discountAmount = round($subtotal * $discountPercent / 100, 2);
