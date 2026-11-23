@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import QuotationImport, {
     type ImportedQuotationItem,
+    type ImportedQuotationMetadata,
 } from "../../../components/quotations/QuotationImport";
 import {
     getInventoryProducts,
@@ -44,13 +45,35 @@ const categories: { value: QuotationItemCategory; label: string }[] = [
 
 type QuotationForm = Omit<
     QuotationPayload,
-    "discount_percent" | "tax_percent" | "internal_worker_count" | "internal_work_days" | "internal_daily_rate" | "internal_labor_entries" | "items"
+    | "discount_percent"
+    | "tax_percent"
+    | "markup_percent"
+    | "internal_worker_count"
+    | "internal_work_days"
+    | "internal_daily_rate"
+    | "internal_labor_entries"
+    | "city"
+    | "requester"
+    | "payment_terms"
+    | "customer_name"
+    | "customer_identification"
+    | "customer_email"
+    | "customer_address"
+    | "items"
 > & {
+    customer_name: string;
+    customer_identification: string;
+    customer_email: string;
+    customer_address: string;
     discount_percent: string;
     tax_percent: string;
+    markup_percent: string;
     internal_worker_count: string;
     internal_work_days: string;
     internal_daily_rate: string;
+    city: string;
+    requester: string;
+    payment_terms: string;
     internal_labor_entries: Array<{
         role: string;
         worker_count: string;
@@ -58,9 +81,24 @@ type QuotationForm = Omit<
         daily_rate: string;
     }>;
     items: Array<
-        Omit<QuotationPayload["items"][number], "quantity" | "unit_price"> & {
+        Omit<
+            QuotationPayload["items"][number],
+            | "quantity"
+            | "unit_price"
+            | "internal_material_cost"
+            | "internal_logistics_cost"
+            | "internal_labor_entries"
+        > & {
             quantity: string;
             unit_price: string;
+            internal_material_cost: string;
+            internal_logistics_cost: string;
+            internal_labor_entries: Array<{
+                role: string;
+                worker_count: string;
+                work_days: string;
+                daily_rate: string;
+            }>;
         }
     >;
 };
@@ -113,6 +151,8 @@ const dateAfter = (days: number) => {
     return toLocalDateValue(date);
 };
 
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 const emptyItem = () => ({
     product_id: null as number | null,
     category: "material" as QuotationItemCategory,
@@ -120,6 +160,10 @@ const emptyItem = () => ({
     unit: "m",
     quantity: "1",
     unit_price: "0",
+    costing_enabled: false,
+    internal_material_cost: "0",
+    internal_logistics_cost: "0",
+    internal_labor_entries: [],
 });
 
 const emptyQuotation = (): QuotationForm => ({
@@ -128,6 +172,8 @@ const emptyQuotation = (): QuotationForm => ({
     customer_identification: "",
     customer_email: "",
     customer_address: "",
+    city: "",
+    requester: "",
     title: "",
     issue_date: today(),
     valid_until: dateAfter(30),
@@ -135,8 +181,10 @@ const emptyQuotation = (): QuotationForm => ({
     scope: "",
     notes: "",
     terms: "Precios expresados en dólares de los Estados Unidos (USD).",
+    payment_terms: "60% de anticipo y 40% contra entrega.",
     discount_percent: "0",
     tax_percent: "15",
+    markup_percent: "15",
     internal_labor_enabled: false,
     internal_worker_count: "1",
     internal_work_days: "1",
@@ -150,16 +198,33 @@ const emptyQuotation = (): QuotationForm => ({
 
 const toPayload = (form: QuotationForm): QuotationPayload => ({
     ...form,
+    city: form.city.trim() || null,
+    requester: form.requester.trim() || null,
+    payment_terms: form.payment_terms.trim() || null,
     discount_percent: parseUserNumber(form.discount_percent),
     tax_percent: parseUserNumber(form.tax_percent),
+    markup_percent: parseUserNumber(form.markup_percent),
     internal_worker_count: form.internal_labor_enabled
-        ? parseUserNumber(form.internal_worker_count)
+        ? form.internal_labor_entries.length
+            ? 1
+            : parseUserNumber(form.internal_worker_count)
         : 0,
     internal_work_days: form.internal_labor_enabled
-        ? parseUserNumber(form.internal_work_days)
+        ? form.internal_labor_entries.length
+            ? 1
+            : parseUserNumber(form.internal_work_days)
         : 0,
     internal_daily_rate: form.internal_labor_enabled
-        ? parseUserNumber(form.internal_daily_rate)
+        ? form.internal_labor_entries.length
+            ? roundMoney(form.internal_labor_entries.reduce(
+                (sum, entry) =>
+                    sum
+                    + parseUserNumber(entry.worker_count)
+                    * parseUserNumber(entry.work_days)
+                    * parseUserNumber(entry.daily_rate),
+                0
+            ))
+            : parseUserNumber(form.internal_daily_rate)
         : 0,
     internal_labor_entries: form.internal_labor_enabled
         ? form.internal_labor_entries.map((entry): InternalLaborEntry => ({
@@ -169,11 +234,34 @@ const toPayload = (form: QuotationForm): QuotationPayload => ({
             daily_rate: parseUserNumber(entry.daily_rate),
         }))
         : [],
-    items: form.items.map((item) => ({
-        ...item,
-        quantity: parseUserNumber(item.quantity),
-        unit_price: parseUserNumber(item.unit_price),
-    })),
+    items: form.items.map((item) => {
+        const laborCost = item.internal_labor_entries.reduce(
+            (sum, entry) =>
+                sum
+                + parseUserNumber(entry.worker_count)
+                * parseUserNumber(entry.work_days)
+                * parseUserNumber(entry.daily_rate),
+            0
+        );
+        const directCost = parseUserNumber(item.internal_material_cost)
+            + laborCost
+            + parseUserNumber(item.internal_logistics_cost);
+        return {
+            ...item,
+            quantity: parseUserNumber(item.quantity),
+            unit_price: item.costing_enabled
+                ? Math.round((directCost * (1 + parseUserNumber(form.markup_percent) / 100) + Number.EPSILON) * 10000) / 10000
+                : parseUserNumber(item.unit_price),
+            internal_material_cost: parseUserNumber(item.internal_material_cost),
+            internal_logistics_cost: parseUserNumber(item.internal_logistics_cost),
+            internal_labor_entries: item.internal_labor_entries.map((entry) => ({
+                role: entry.role.trim(),
+                worker_count: parseUserNumber(entry.worker_count),
+                work_days: parseUserNumber(entry.work_days),
+                daily_rate: parseUserNumber(entry.daily_rate),
+            })),
+        };
+    }),
 });
 
 const parseUserNumber = (value: string) => {
@@ -262,29 +350,44 @@ function QuotationPage() {
     const [inventorySearch, setInventorySearch] = useState("");
     const [inventoryCategory, setInventoryCategory] = useState("");
 
-    const itemsSubtotal = useMemo(
-        () => form.items.reduce(
-            (sum, item) => sum
-                + parseUserNumber(item.quantity) * parseUserNumber(item.unit_price),
-            0
-        ),
-        [form.items]
-    );
-    const internalLaborTotal = form.internal_labor_enabled
-        ? form.internal_labor_entries.reduce(
+    const costedUnitPrice = (item: QuotationForm["items"][number]) => {
+        const laborCost = item.internal_labor_entries.reduce(
             (sum, entry) =>
                 sum
                 + parseUserNumber(entry.worker_count)
                 * parseUserNumber(entry.work_days)
                 * parseUserNumber(entry.daily_rate),
             0
-        )
+        );
+        const directCost = parseUserNumber(item.internal_material_cost)
+            + laborCost
+            + parseUserNumber(item.internal_logistics_cost);
+        return Math.round((directCost * (1 + parseUserNumber(form.markup_percent) / 100) + Number.EPSILON) * 10000) / 10000;
+    };
+
+    const itemsSubtotal = form.items.reduce(
+            (sum, item) => sum
+                + roundMoney(
+                    parseUserNumber(item.quantity)
+                    * (item.costing_enabled ? costedUnitPrice(item) : parseUserNumber(item.unit_price))
+                ),
+            0
+        );
+    const internalLaborTotal = form.internal_labor_enabled
+        ? roundMoney(form.internal_labor_entries.reduce(
+            (sum, entry) =>
+                sum
+                + parseUserNumber(entry.worker_count)
+                * parseUserNumber(entry.work_days)
+                * parseUserNumber(entry.daily_rate),
+            0
+        ))
         : 0;
-    const subtotal = itemsSubtotal + internalLaborTotal;
-    const discountAmount = subtotal * parseUserNumber(form.discount_percent) / 100;
+    const subtotal = roundMoney(itemsSubtotal + internalLaborTotal);
+    const discountAmount = roundMoney(subtotal * parseUserNumber(form.discount_percent) / 100);
     const taxableAmount = Math.max(0, subtotal - discountAmount);
-    const taxAmount = taxableAmount * parseUserNumber(form.tax_percent) / 100;
-    const total = taxableAmount + taxAmount;
+    const taxAmount = roundMoney(taxableAmount * parseUserNumber(form.tax_percent) / 100);
+    const total = roundMoney(taxableAmount + taxAmount);
 
     const inventoryCategories = useMemo(
         () => Array.from(new Set(
@@ -380,6 +483,8 @@ function QuotationPage() {
             customer_identification: item.customer_identification ?? "",
             customer_email: item.customer_email ?? "",
             customer_address: item.customer_address ?? "",
+            city: item.city ?? "",
+            requester: item.requester ?? "",
             title: item.title,
             issue_date: item.issue_date.slice(0, 10),
             valid_until: item.valid_until.slice(0, 10),
@@ -387,8 +492,10 @@ function QuotationPage() {
             scope: item.scope ?? "",
             notes: item.notes ?? "",
             terms: item.terms ?? "",
+            payment_terms: item.payment_terms ?? "",
             discount_percent: numberInputValue(item.discount_percent),
             tax_percent: numberInputValue(item.tax_percent),
+            markup_percent: numberInputValue(item.markup_percent ?? 15),
             internal_labor_enabled: item.internal_labor_enabled ?? false,
             internal_worker_count: numberInputValue(item.internal_worker_count ?? 0),
             internal_work_days: numberInputValue(item.internal_work_days ?? 0),
@@ -409,13 +516,22 @@ function QuotationPage() {
                 work_days: numberInputValue(entry.work_days),
                 daily_rate: numberInputValue(entry.daily_rate),
             })),
-            items: item.items.map(({ product_id, category, description, unit, quantity, unit_price }) => ({
-                product_id: product_id ?? null,
-                category,
-                description,
-                unit,
-                quantity: numberInputValue(quantity),
-                unit_price: numberInputValue(unit_price),
+            items: item.items.map((quotationItem) => ({
+                product_id: quotationItem.product_id ?? null,
+                category: quotationItem.category,
+                description: quotationItem.description,
+                unit: quotationItem.unit,
+                quantity: numberInputValue(quotationItem.quantity),
+                unit_price: numberInputValue(quotationItem.unit_price),
+                costing_enabled: quotationItem.costing_enabled ?? false,
+                internal_material_cost: numberInputValue(quotationItem.internal_material_cost ?? 0),
+                internal_logistics_cost: numberInputValue(quotationItem.internal_logistics_cost ?? 0),
+                internal_labor_entries: (quotationItem.internal_labor_entries ?? []).map((entry) => ({
+                    role: entry.role,
+                    worker_count: numberInputValue(entry.worker_count),
+                    work_days: numberInputValue(entry.work_days),
+                    daily_rate: numberInputValue(entry.daily_rate),
+                })),
             })),
         });
         setError("");
@@ -463,8 +579,11 @@ function QuotationPage() {
             || !item.unit.trim()
             || !isValidUserNumber(item.quantity)
             || parseUserNumber(item.quantity) <= 0
-            || !isValidUserNumber(item.unit_price)
-            || parseUserNumber(item.unit_price) < 0
+            || (!item.costing_enabled
+                && (
+                    !isValidUserNumber(item.unit_price)
+                    || parseUserNumber(item.unit_price) < 0
+                ))
         )) {
             setError("Completa cada partida con una cantidad mayor a cero y un precio válido.");
             return;
@@ -476,8 +595,43 @@ function QuotationPage() {
             || !isValidUserNumber(form.tax_percent)
             || parseUserNumber(form.tax_percent) < 0
             || parseUserNumber(form.tax_percent) > 100
+            || !isValidUserNumber(form.markup_percent)
+            || parseUserNumber(form.markup_percent) < 0
+            || parseUserNumber(form.markup_percent) > 1000
         ) {
-            setError("El descuento y el IVA deben estar entre 0 y 100.");
+            setError("El descuento y el IVA deben estar entre 0 y 100; el recargo debe estar entre 0 y 1000.");
+            return;
+        }
+        if (form.items.some((item) => item.costing_enabled && (
+            !isValidUserNumber(item.internal_material_cost)
+            || parseUserNumber(item.internal_material_cost) > 100000000
+            || !isValidUserNumber(item.internal_logistics_cost)
+            || parseUserNumber(item.internal_logistics_cost) > 100000000
+            || parseUserNumber(item.internal_material_cost)
+                + parseUserNumber(item.internal_logistics_cost)
+                + item.internal_labor_entries.reduce(
+                    (sum, entry) =>
+                        sum
+                        + parseUserNumber(entry.worker_count)
+                        * parseUserNumber(entry.work_days)
+                        * parseUserNumber(entry.daily_rate),
+                    0
+                ) <= 0
+            || item.internal_labor_entries.some((entry) =>
+                !entry.role.trim()
+                || !isValidUserNumber(entry.worker_count)
+                || parseUserNumber(entry.worker_count) < 1
+                || parseUserNumber(entry.worker_count) > 1000
+                || !Number.isInteger(parseUserNumber(entry.worker_count))
+                || !isValidUserNumber(entry.work_days)
+                || parseUserNumber(entry.work_days) <= 0
+                || parseUserNumber(entry.work_days) > 10000
+                || !isValidUserNumber(entry.daily_rate)
+                || parseUserNumber(entry.daily_rate) <= 0
+                || parseUserNumber(entry.daily_rate) > 100000000
+            )
+        ))) {
+            setError("Completa los costos de cada partida calculada. El costo directo debe ser mayor que cero.");
             return;
         }
         if (
@@ -488,8 +642,11 @@ function QuotationPage() {
                     !entry.role.trim()
                     || !isValidUserNumber(entry.worker_count)
                     || parseUserNumber(entry.worker_count) < 1
+                    || parseUserNumber(entry.worker_count) > 1000
+                    || !Number.isInteger(parseUserNumber(entry.worker_count))
                     || !isValidUserNumber(entry.work_days)
                     || parseUserNumber(entry.work_days) <= 0
+                    || parseUserNumber(entry.work_days) > 10000
                     || !isValidUserNumber(entry.daily_rate)
                     || parseUserNumber(entry.daily_rate) <= 0
                 )
@@ -546,6 +703,8 @@ function QuotationPage() {
                 customer_identification: quotation.customer_identification ?? "",
                 customer_email: quotation.customer_email ?? "",
                 customer_address: quotation.customer_address ?? "",
+                city: quotation.city ?? "",
+                requester: quotation.requester ?? "",
                 title: quotation.title,
                 issue_date: quotation.issue_date.slice(0, 10),
                 valid_until: quotation.valid_until.slice(0, 10),
@@ -553,27 +712,41 @@ function QuotationPage() {
                 scope: quotation.scope ?? "",
                 notes: quotation.notes ?? "",
                 terms: quotation.terms ?? "",
+                payment_terms: quotation.payment_terms ?? "",
                 discount_percent: Number(quotation.discount_percent),
                 tax_percent: Number(quotation.tax_percent),
+                markup_percent: Number(quotation.markup_percent ?? 15),
                 internal_labor_enabled: quotation.internal_labor_enabled ?? false,
-                internal_worker_count: quotation.internal_worker_count ?? 0,
-                internal_work_days: Number(quotation.internal_work_days ?? 0),
-                internal_daily_rate: Number(quotation.internal_daily_rate ?? 0),
-                internal_labor_entries: (quotation.internal_labor_entries?.length
-                    ? quotation.internal_labor_entries
-                    : [{
-                        role: "Técnico",
-                        worker_count: quotation.internal_worker_count ?? 1,
-                        work_days: Number(quotation.internal_work_days ?? 1),
-                        daily_rate: Number(quotation.internal_daily_rate ?? 0),
-                    }]),
-                items: quotation.items.map(({ product_id, category, description, unit, quantity, unit_price }) => ({
-                    product_id: product_id ?? null,
-                    category,
-                    description,
-                    unit,
-                    quantity: Number(quantity),
-                    unit_price: Number(unit_price),
+                internal_worker_count: quotation.internal_labor_entries?.length ? 1 : quotation.internal_worker_count ?? 0,
+                internal_work_days: quotation.internal_labor_entries?.length ? 1 : Number(quotation.internal_work_days ?? 0),
+                internal_daily_rate: quotation.internal_labor_entries?.length
+                    ? quotation.internal_labor_entries.reduce(
+                        (sum, entry) =>
+                            sum + Number(entry.worker_count) * Number(entry.work_days) * Number(entry.daily_rate),
+                        0
+                    )
+                    : Number(quotation.internal_daily_rate ?? 0),
+                internal_labor_entries: quotation.internal_labor_enabled
+                    ? (quotation.internal_labor_entries?.length
+                        ? quotation.internal_labor_entries
+                        : [{
+                            role: "Técnico",
+                            worker_count: quotation.internal_worker_count ?? 1,
+                            work_days: Number(quotation.internal_work_days ?? 1),
+                            daily_rate: Number(quotation.internal_daily_rate ?? 0),
+                        }])
+                    : [],
+                items: quotation.items.map((item) => ({
+                    product_id: item.product_id ?? null,
+                    category: item.category,
+                    description: item.description,
+                    unit: item.unit,
+                    quantity: Number(item.quantity),
+                    unit_price: Number(item.unit_price),
+                    costing_enabled: item.costing_enabled ?? false,
+                    internal_material_cost: Number(item.internal_material_cost ?? 0),
+                    internal_logistics_cost: Number(item.internal_logistics_cost ?? 0),
+                    internal_labor_entries: item.internal_labor_entries ?? [],
                 })),
             };
             if (nextStatus === "sent") {
@@ -672,24 +845,49 @@ function QuotationPage() {
                             : product.name,
                         unit: product.unit,
                         unit_price: numberInputValue(product.unit_price),
+                        internal_material_cost: numberInputValue(product.unit_price),
                     }
                     : { ...item, product_id: null }
                 : item)
         );
     };
-    const approveImportedItems = (items: ImportedQuotationItem[]) => {
-        const replaceBlankDefault = form.items.length === 1
-            && !form.items[0].description.trim()
-            && form.items[0].unit === "m"
-            && form.items[0].quantity === "1"
-            && form.items[0].unit_price === "0";
-        updateForm(
-            "items",
-            [
-                ...(replaceBlankDefault ? [] : form.items),
-                ...items.map((item) => ({ ...item, product_id: null })),
-            ]
-        );
+    const approveImportedItems = (
+        items: ImportedQuotationItem[],
+        metadata?: ImportedQuotationMetadata
+    ) => {
+        setForm((current) => {
+            const replaceBlankDefault = current.items.length === 1
+                && !current.items[0].description.trim()
+                && current.items[0].unit === "m"
+                && current.items[0].quantity === "1"
+                && current.items[0].unit_price === "0";
+            return {
+                ...current,
+                customer_name: current.customer_name.trim()
+                    ? current.customer_name
+                    : metadata?.customer_name ?? current.customer_name,
+                city: current.city.trim() ? current.city : metadata?.city ?? current.city,
+                requester: current.requester.trim()
+                    ? current.requester
+                    : metadata?.requester ?? current.requester,
+                payment_terms: !current.payment_terms.trim()
+                    || current.payment_terms === "60% de anticipo y 40% contra entrega."
+                    ? metadata?.payment_terms ?? current.payment_terms
+                    : current.payment_terms,
+                title: current.title.trim() ? current.title : metadata?.title ?? current.title,
+                items: [
+                    ...(replaceBlankDefault ? [] : current.items),
+                    ...items.map((item) => ({
+                        ...item,
+                        product_id: null,
+                        costing_enabled: false,
+                        internal_material_cost: "0",
+                        internal_logistics_cost: "0",
+                        internal_labor_entries: [],
+                    })),
+                ],
+            };
+        });
     };
     const changeItemCategory = (
         index: number,
@@ -864,6 +1062,14 @@ function QuotationPage() {
                                 <input maxLength={500} value={form.customer_address} onChange={(event) => updateForm("customer_address", event.target.value)} placeholder="Opcional" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
                             </label>
                             <label className="text-sm font-semibold text-slate-700">
+                                Ciudad o lugar de la obra
+                                <input maxLength={150} value={form.city} onChange={(event) => updateForm("city", event.target.value)} placeholder="Ej. Guaranda" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
+                            <label className="text-sm font-semibold text-slate-700">
+                                Solicitante
+                                <input maxLength={180} value={form.requester} onChange={(event) => updateForm("requester", event.target.value)} placeholder="Nombre del contacto o responsable" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
+                            <label className="text-sm font-semibold text-slate-700">
                                 Título de la cotización *
                                 <input required maxLength={180} value={form.title} onChange={(event) => updateForm("title", event.target.value)} placeholder="Ej. Instalación eléctrica residencial" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
                             </label>
@@ -885,6 +1091,10 @@ function QuotationPage() {
                                 Alcance del trabajo
                                 <textarea rows={3} maxLength={10000} value={form.scope} onChange={(event) => updateForm("scope", event.target.value)} placeholder="Describe el trabajo, las instalaciones o resultados incluidos en esta propuesta." className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
                             </label>
+                            <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+                                Condiciones de pago
+                                <textarea rows={2} maxLength={5000} value={form.payment_terms} onChange={(event) => updateForm("payment_terms", event.target.value)} placeholder="Ej. 60% de anticipo y 40% contra entrega." className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
                         </div>
                     </section>
 
@@ -900,10 +1110,38 @@ function QuotationPage() {
                         <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                             <div>
                                 <h2 className="font-semibold text-slate-900">Partidas de la cotización</h2>
-                                <p className="mt-1 text-sm text-slate-500">Agrega materiales, mano de obra, equipos y servicios.</p>
+                                <p className="mt-1 text-sm text-slate-500">Agrega materiales, mano de obra, equipos y servicios; configura costos internos y recargo.</p>
                             </div>
                             <button type="button" onClick={addItem} className="rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50">+ Agregar partida</button>
                         </div>
+                        <label className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-slate-700">
+                            Recargo sobre costo para partidas costeadas
+                            <select
+                                value={["13", "15", "28", "30"].includes(form.markup_percent) ? form.markup_percent : "custom"}
+                                onChange={(event) => {
+                                    updateForm("markup_percent", event.target.value === "custom" ? "" : event.target.value);
+                                }}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                            >
+                                <option value="13">13%</option>
+                                <option value="15">15%</option>
+                                <option value="28">28%</option>
+                                <option value="30">30%</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                            {(!["13", "15", "28", "30"].includes(form.markup_percent)
+                                || form.markup_percent === "") && (
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    aria-label="Recargo personalizado"
+                                    value={form.markup_percent}
+                                    onChange={(event) => updateForm("markup_percent", event.target.value)}
+                                    className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-right font-normal"
+                                />
+                            )}
+                            <span className="text-xs font-normal text-slate-500">Se aplica al costo directo, antes del IVA.</span>
+                        </label>
                         <div className="space-y-4">
                             {form.items.map((item, index) => (
                                 <div key={index} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-12">
@@ -944,7 +1182,7 @@ function QuotationPage() {
                                     </label>
                                     <label className="text-xs font-semibold text-slate-600 md:col-span-3">
                                         Descripción *
-                                        <input required maxLength={255} value={item.description} onChange={(event) => updateItem(index, "description", event.target.value)} placeholder="Cable, instalación de luminarias…" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800" />
+                                        <input required maxLength={10000} value={item.description} onChange={(event) => updateItem(index, "description", event.target.value)} placeholder="Cable, instalación de luminarias…" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800" />
                                     </label>
                                     <label className="text-xs font-semibold text-slate-600 md:col-span-2">
                                         Unidad *
@@ -962,12 +1200,186 @@ function QuotationPage() {
                                     </label>
                                     <label className="text-xs font-semibold text-slate-600 md:col-span-2">
                                         Precio unitario
-                                        <input required type="text" inputMode="decimal" value={item.unit_price} onChange={(event) => updateItem(index, "unit_price", event.target.value)} placeholder="Ej. 20" aria-label={`Precio unitario de partida ${index + 1}`} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800" />
+                                        <input required type="text" inputMode="decimal" readOnly={item.costing_enabled} value={item.costing_enabled ? String(costedUnitPrice(item)) : item.unit_price} onChange={(event) => updateItem(index, "unit_price", event.target.value)} placeholder="Ej. 20" aria-label={`Precio unitario de partida ${index + 1}`} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800 read-only:bg-slate-100" />
                                     </label>
+                                    <div className="md:col-span-12">
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-violet-900">
+                                            <input
+                                                type="checkbox"
+                                                checked={item.costing_enabled}
+                                                onChange={(event) => updateForm(
+                                                    "items",
+                                                    form.items.map((current, itemIndex) =>
+                                                        itemIndex === index
+                                                            ? { ...current, costing_enabled: event.target.checked }
+                                                            : current
+                                                    )
+                                                )}
+                                                className="h-4 w-4 accent-violet-700"
+                                            />
+                                            Calcular precio desde el costo directo de esta partida
+                                        </label>
+                                        {item.costing_enabled && (
+                                            <div className="mt-3 space-y-3 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
+                                                <p className="text-xs text-slate-600">La mano de obra aquí corresponde solo a esta partida. No la repitas en el bloque general de costos internos.</p>
+                                                <div className="grid gap-3 md:grid-cols-2">
+                                                    <label className="text-xs font-semibold text-slate-700">
+                                                        Materiales por unidad (USD)
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={item.internal_material_cost}
+                                                            onChange={(event) => updateItem(index, "internal_material_cost", event.target.value)}
+                                                            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                                                        />
+                                                    </label>
+                                                    <label className="text-xs font-semibold text-slate-700">
+                                                        Transporte, movilización y otros (USD/unidad)
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={item.internal_logistics_cost}
+                                                            onChange={(event) => updateItem(index, "internal_logistics_cost", event.target.value)}
+                                                            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                                                        />
+                                                    </label>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <p className="text-xs font-semibold text-slate-700">Cuadrilla y jornales para esta partida</p>
+                                                    {item.internal_labor_entries.map((entry, entryIndex) => (
+                                                        <div key={entryIndex} className="grid gap-2 rounded border border-violet-100 bg-white p-2 sm:grid-cols-[minmax(120px,1.4fr)_0.7fr_0.7fr_1fr_auto]">
+                                                            <input
+                                                                aria-label={`Cargo de trabajador ${entryIndex + 1} partida ${index + 1}`}
+                                                                placeholder="Técnico, líder…"
+                                                                maxLength={120}
+                                                                value={entry.role}
+                                                                onChange={(event) => updateForm(
+                                                                    "items",
+                                                                    form.items.map((current, itemIndex) => itemIndex === index
+                                                                        ? {
+                                                                            ...current,
+                                                                            internal_labor_entries: current.internal_labor_entries.map((currentEntry, currentEntryIndex) =>
+                                                                                currentEntryIndex === entryIndex ? { ...currentEntry, role: event.target.value } : currentEntry
+                                                                            ),
+                                                                        }
+                                                                        : current
+                                                                    )
+                                                                )}
+                                                                className="rounded border border-slate-300 px-2 py-2 text-sm"
+                                                            />
+                                                            <input
+                                                                aria-label={`Cantidad de trabajadores ${entryIndex + 1} partida ${index + 1}`}
+                                                                type="number" min="1" max="1000" step="1" placeholder="Personas"
+                                                                value={entry.worker_count}
+                                                                onChange={(event) => updateForm(
+                                                                    "items",
+                                                                    form.items.map((current, itemIndex) => itemIndex === index
+                                                                        ? {
+                                                                            ...current,
+                                                                            internal_labor_entries: current.internal_labor_entries.map((currentEntry, currentEntryIndex) =>
+                                                                                currentEntryIndex === entryIndex ? { ...currentEntry, worker_count: event.target.value } : currentEntry
+                                                                            ),
+                                                                        }
+                                                                        : current
+                                                                    )
+                                                                )}
+                                                                className="rounded border border-slate-300 px-2 py-2 text-sm"
+                                                            />
+                                                            <input
+                                                                aria-label={`Jornadas de trabajador ${entryIndex + 1} partida ${index + 1}`}
+                                                                type="number" min="0.01" max="10000" step="any" placeholder="Días"
+                                                                value={entry.work_days}
+                                                                onChange={(event) => updateForm(
+                                                                    "items",
+                                                                    form.items.map((current, itemIndex) => itemIndex === index
+                                                                        ? {
+                                                                            ...current,
+                                                                            internal_labor_entries: current.internal_labor_entries.map((currentEntry, currentEntryIndex) =>
+                                                                                currentEntryIndex === entryIndex ? { ...currentEntry, work_days: event.target.value } : currentEntry
+                                                                            ),
+                                                                        }
+                                                                        : current
+                                                                    )
+                                                                )}
+                                                                className="rounded border border-slate-300 px-2 py-2 text-sm"
+                                                            />
+                                                            <input
+                                                                aria-label={`Pago diario de trabajador ${entryIndex + 1} partida ${index + 1}`}
+                                                                type="number" min="0.01" max="100000000" step="any" placeholder="USD/día"
+                                                                value={entry.daily_rate}
+                                                                onChange={(event) => updateForm(
+                                                                    "items",
+                                                                    form.items.map((current, itemIndex) => itemIndex === index
+                                                                        ? {
+                                                                            ...current,
+                                                                            internal_labor_entries: current.internal_labor_entries.map((currentEntry, currentEntryIndex) =>
+                                                                                currentEntryIndex === entryIndex ? { ...currentEntry, daily_rate: event.target.value } : currentEntry
+                                                                            ),
+                                                                        }
+                                                                        : current
+                                                                    )
+                                                                )}
+                                                                className="rounded border border-slate-300 px-2 py-2 text-sm"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                aria-label={`Quitar trabajador ${entryIndex + 1} partida ${index + 1}`}
+                                                                onClick={() => updateForm(
+                                                                    "items",
+                                                                    form.items.map((current, itemIndex) => itemIndex === index
+                                                                        ? {
+                                                                            ...current,
+                                                                            internal_labor_entries: current.internal_labor_entries.filter((_, currentEntryIndex) => currentEntryIndex !== entryIndex),
+                                                                        }
+                                                                        : current
+                                                                    )
+                                                                )}
+                                                                className="rounded px-2 text-sm text-red-700 hover:bg-red-50"
+                                                            >
+                                                                Quitar
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => updateForm(
+                                                            "items",
+                                                            form.items.map((current, itemIndex) => itemIndex === index
+                                                                ? {
+                                                                    ...current,
+                                                                    internal_labor_entries: [
+                                                                        ...current.internal_labor_entries,
+                                                                        { role: "", worker_count: "1", work_days: "1", daily_rate: "25" },
+                                                                    ],
+                                                                }
+                                                                : current
+                                                            )
+                                                        )}
+                                                        className="text-xs font-semibold text-violet-800 hover:underline"
+                                                    >
+                                                        + Agregar tipo de trabajador
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-slate-700">
+                                                    Costo directo: {money(
+                                                        parseUserNumber(item.internal_material_cost)
+                                                        + parseUserNumber(item.internal_logistics_cost)
+                                                        + item.internal_labor_entries.reduce(
+                                                            (sum, entry) => sum
+                                                                + parseUserNumber(entry.worker_count)
+                                                                * parseUserNumber(entry.work_days)
+                                                                * parseUserNumber(entry.daily_rate),
+                                                            0
+                                                        )
+                                                    )} · Precio con recargo {form.markup_percent || 0}%: <strong>{money(costedUnitPrice(item))}</strong>
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="flex items-end justify-between md:col-span-2">
                                         <div className="pb-2">
                                             <span className="block text-xs text-slate-500">Importe</span>
-                                            <span className="font-semibold text-slate-900">{money(parseUserNumber(item.quantity) * parseUserNumber(item.unit_price))}</span>
+                                            <span className="font-semibold text-slate-900">{money(roundMoney(parseUserNumber(item.quantity) * (item.costing_enabled ? costedUnitPrice(item) : parseUserNumber(item.unit_price))))}</span>
                                         </div>
                                         <button type="button" disabled={form.items.length === 1} onClick={() => removeItem(index)} aria-label={`Eliminar partida ${index + 1}`} className="rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-30">Eliminar</button>
                                     </div>
@@ -980,7 +1392,7 @@ function QuotationPage() {
                         <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <h2 className="font-semibold text-slate-900">Costos internos de mano de obra</h2>
-                                <p className="mt-1 text-sm text-slate-600">Uso interno. Se incluyen en el precio final, pero no se detallan en la cotización ni en el PDF.</p>
+                                <p className="mt-1 text-sm text-slate-600">Uso interno. Se suman aparte de las cuadrillas asignadas dentro de partidas costeadas; no registres dos veces la misma mano de obra.</p>
                             </div>
                             <label className="flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-violet-900">
                                 <input
@@ -1190,11 +1602,13 @@ function QuotationPage() {
                     <section className="grid gap-5 lg:grid-cols-[1fr_320px]">
                         <div className="space-y-5">
                             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                                <h2 className="font-semibold text-slate-900">Destinatario</h2>
+                                <h2 className="font-semibold text-slate-900">Destinatario y proyecto</h2>
                                 <p className="mt-3 font-medium text-slate-800">{quotation.customer_name}</p>
                                 <p className="text-sm text-slate-500">Identificación: {quotation.customer_identification}</p>
                                 {quotation.customer_email && <p className="text-sm text-slate-500">{quotation.customer_email}</p>}
                                 {quotation.customer_address && <p className="text-sm text-slate-500">{quotation.customer_address}</p>}
+                                {quotation.city && <p className="mt-2 text-sm text-slate-600">Ciudad de la obra: {quotation.city}</p>}
+                                {quotation.requester && <p className="text-sm text-slate-600">Solicitante: {quotation.requester}</p>}
                             </div>
                             {quotation.scope && (
                                 <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1232,8 +1646,9 @@ function QuotationPage() {
                                     <div className="flex justify-between border-t border-slate-200 pt-4 text-lg font-bold text-slate-900"><span>Total</span><span>{money(quotation.total)}</span></div>
                                 </div>
                             </div>
-                            {(quotation.terms || quotation.notes) && (
+                            {(quotation.payment_terms || quotation.terms || quotation.notes) && (
                                 <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                                    {quotation.payment_terms && <><h2 className="font-semibold text-slate-900">Condiciones de pago</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{quotation.payment_terms}</p></>}
                                     {quotation.terms && <><h2 className="font-semibold text-slate-900">Términos y condiciones</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{quotation.terms}</p></>}
                                     {quotation.notes && <><h2 className="mt-5 font-semibold text-slate-900">Observaciones</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{quotation.notes}</p></>}
                                 </div>

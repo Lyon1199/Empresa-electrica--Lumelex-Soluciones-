@@ -219,6 +219,79 @@ class QuotationTest extends TestCase
         ]);
     }
 
+    public function test_quotation_accepts_multiple_internal_labor_rates_without_a_single_daily_rate(): void
+    {
+        $this->actingAs($this->createStaff(), 'web');
+        $payload = $this->quotationPayload($this->createCustomer());
+        $payload['internal_labor_enabled'] = true;
+        $payload['internal_worker_count'] = 1;
+        $payload['internal_work_days'] = 1;
+        $payload['internal_daily_rate'] = 0;
+        $payload['internal_labor_entries'] = [
+            [
+                'role' => 'Técnico',
+                'worker_count' => 2,
+                'work_days' => 3,
+                'daily_rate' => 25,
+            ],
+            [
+                'role' => 'Líder',
+                'worker_count' => 1,
+                'work_days' => 3,
+                'daily_rate' => 40,
+            ],
+        ];
+
+        $this->postJson('/api/quotations', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.internal_labor_total', '270.00')
+            ->assertJsonPath('data.subtotal', '470.00')
+            ->assertJsonPath('data.internal_labor_entries.0.daily_rate', 25)
+            ->assertJsonPath('data.internal_labor_entries.1.daily_rate', 40);
+    }
+
+    public function test_costed_items_apply_the_markup_to_materials_labor_and_logistics_before_tax(): void
+    {
+        $this->actingAs($this->createStaff(), 'web');
+        $payload = $this->quotationPayload($this->createCustomer());
+        $payload['city'] = 'Guaranda';
+        $payload['requester'] = 'Ing. Wagner';
+        $payload['payment_terms'] = '60% anticipado y 40% contra entrega.';
+        $payload['markup_percent'] = 13;
+        $payload['discount_percent'] = 0;
+        $payload['items'][0] = [
+            'category' => 'service',
+            'description' => 'Suministro e instalación de sistema a tierra',
+            'unit' => 'Glb',
+            'quantity' => 1,
+            'unit_price' => 1000,
+            'costing_enabled' => true,
+            'internal_material_cost' => 1536.61,
+            'internal_logistics_cost' => 0,
+            'internal_labor_entries' => [
+                [
+                    'role' => 'Cuadrilla',
+                    'worker_count' => 1,
+                    'work_days' => 1,
+                    'daily_rate' => 1000,
+                ],
+            ],
+        ];
+
+        $this->postJson('/api/quotations', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.city', 'Guaranda')
+            ->assertJsonPath('data.requester', 'Ing. Wagner')
+            ->assertJsonPath('data.payment_terms', '60% anticipado y 40% contra entrega.')
+            ->assertJsonPath('data.markup_percent', '13.00')
+            ->assertJsonPath('data.items.0.unit_price', '2866.3693')
+            ->assertJsonPath('data.items.0.line_total', '2866.37')
+            ->assertJsonPath('data.subtotal', '2866.37')
+            ->assertJsonPath('data.tax_amount', '429.96')
+            ->assertJsonPath('data.total', '3296.33')
+            ->assertJsonPath('data.items.0.internal_labor_entries.0.daily_rate', 1000);
+    }
+
     public function test_marking_a_draft_quotation_as_sent_emails_the_pdf_to_the_customer(): void
     {
         Mail::fake();

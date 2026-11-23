@@ -15,6 +15,10 @@ class QuotationItem extends Model
         'quantity',
         'unit_price',
         'line_total',
+        'costing_enabled',
+        'internal_material_cost',
+        'internal_logistics_cost',
+        'internal_labor_entries',
         'position',
     ];
 
@@ -22,6 +26,10 @@ class QuotationItem extends Model
         'quantity' => 'decimal:3',
         'unit_price' => 'decimal:4',
         'line_total' => 'decimal:2',
+        'costing_enabled' => 'boolean',
+        'internal_material_cost' => 'decimal:4',
+        'internal_logistics_cost' => 'decimal:4',
+        'internal_labor_entries' => 'array',
     ];
 
     public function quotation(): BelongsTo

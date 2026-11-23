@@ -43,6 +43,9 @@ class QuotationController extends Controller
                 'customer_identification',
                 'customer_email',
                 'customer_address',
+                'city',
+                'requester',
+                'payment_terms',
                 'title',
                 'issue_date',
                 'valid_until',
@@ -57,6 +60,7 @@ class QuotationController extends Controller
                 'tax_percent',
                 'tax_amount',
                 'total',
+                'markup_percent',
                 'created_by',
                 'created_at',
                 'updated_at',
@@ -238,6 +242,10 @@ class QuotationController extends Controller
                 'quantity',
                 'unit_price',
                 'line_total',
+                'costing_enabled',
+                'internal_material_cost',
+                'internal_logistics_cost',
+                'internal_labor_entries',
                 'position',
             ]))->all();
             $copy->items()->createMany($items);
@@ -356,6 +364,9 @@ class QuotationController extends Controller
             'customer_address' => $customer
                 ? $customer->address
                 : ($data['customer_address'] ?? null),
+            'city' => $data['city'] ?? null,
+            'requester' => $data['requester'] ?? null,
+            'payment_terms' => $data['payment_terms'] ?? null,
             'title' => $data['title'],
             'issue_date' => $data['issue_date'],
             'valid_until' => $data['valid_until'],
@@ -364,6 +375,7 @@ class QuotationController extends Controller
             'notes' => $data['notes'] ?? null,
             'terms' => $data['terms'] ?? null,
             'currency' => 'USD',
+            'markup_percent' => $data['markup_percent'] ?? 15,
             'internal_labor_enabled' => $internalLaborEnabled,
             'internal_worker_count' => $workerCount,
             'internal_work_days' => $workDays,
@@ -378,6 +390,7 @@ class QuotationController extends Controller
 
         $subtotal = 0;
         $items = [];
+        $markupPercent = (float) ($data['markup_percent'] ?? 15);
 
         foreach ($data['items'] as $position => $item) {
             if (! empty($item['product_id'])) {
@@ -392,6 +405,24 @@ class QuotationController extends Controller
                 ], $item);
             }
 
+            $laborEntries = $item['internal_labor_entries'] ?? [];
+            $internalLaborCost = 0;
+            foreach ($laborEntries as $entry) {
+                $internalLaborCost += (int) $entry['worker_count']
+                    * (float) $entry['work_days']
+                    * (float) $entry['daily_rate'];
+            }
+            $materialCost = (float) ($item['internal_material_cost'] ?? 0);
+            $logisticsCost = (float) ($item['internal_logistics_cost'] ?? 0);
+            $costingEnabled = ! empty($item['costing_enabled']);
+            if ($costingEnabled) {
+                $directCost = $materialCost + $internalLaborCost + $logisticsCost;
+                if ($directCost <= 0) {
+                    abort(422, 'Cada partida con costeo debe incluir algún costo de materiales, mano de obra o logística.');
+                }
+                $item['unit_price'] = round($directCost * (1 + $markupPercent / 100), 4);
+            }
+
             $lineTotal = round(
                 (float) $item['quantity'] * (float) $item['unit_price'],
                 2
@@ -399,6 +430,10 @@ class QuotationController extends Controller
             $subtotal += $lineTotal;
             $items[] = [
                 ...$item,
+                'costing_enabled' => $costingEnabled,
+                'internal_material_cost' => $materialCost,
+                'internal_logistics_cost' => $logisticsCost,
+                'internal_labor_entries' => $laborEntries,
                 'line_total' => $lineTotal,
                 'position' => $position,
             ];

@@ -9,8 +9,16 @@ export interface ImportedQuotationItem {
     unit_price: string;
 }
 
+export interface ImportedQuotationMetadata {
+    customer_name?: string;
+    city?: string;
+    requester?: string;
+    payment_terms?: string;
+    title?: string;
+}
+
 interface Props {
-    onApprove: (items: ImportedQuotationItem[]) => void;
+    onApprove: (items: ImportedQuotationItem[], metadata?: ImportedQuotationMetadata) => void;
 }
 
 const acceptedExtensions = [".pdf", ".xlsx", ".xls", ".docx", ".jpg", ".jpeg", ".png", ".webp"];
@@ -34,6 +42,8 @@ interface ParsedSpreadsheetSheet {
     skippedTaxRows: number;
     skippedLaborRows: number;
     taxPercent: string | null;
+    importsSummaryOnly?: boolean;
+    metadata?: ImportedQuotationMetadata;
 }
 
 const normalizedText = (value: unknown) => String(value ?? "")
@@ -48,6 +58,37 @@ const spreadsheetNumber = (value: unknown) => {
     return normalizeNumber(String(value ?? "").trim());
 };
 
+const extractSpreadsheetMetadata = (rows: unknown[][]): ImportedQuotationMetadata => {
+    const readLabel = (label: string) => {
+        const row = rows.find((cells) =>
+            cells.some((cell) => normalizedText(cell).replace(/:$/, "") === label)
+        );
+        if (!row) return undefined;
+        const labelIndex = row.findIndex((cell) =>
+            normalizedText(cell).replace(/:$/, "") === label
+        );
+        return row.slice(labelIndex + 1)
+            .map((cell) => String(cell ?? "").trim())
+            .find(Boolean);
+    };
+    const serviceHeaderIndex = rows.findIndex((row) =>
+        row.some((cell) => normalizedText(cell).replace(/:$/, "") === "descripcion del servicio")
+    );
+    const title = serviceHeaderIndex < 0
+        ? undefined
+        : rows.slice(serviceHeaderIndex + 1)
+            .flatMap((row) => row.map((cell) => String(cell ?? "").trim()))
+            .find(Boolean);
+
+    return {
+        customer_name: readLabel("cliente"),
+        city: readLabel("ciudad"),
+        requester: readLabel("solicitante"),
+        payment_terms: readLabel("forma de pago"),
+        title: title?.slice(0, 180),
+    };
+};
+
 const inferCategory = (description: string): QuotationItemCategory => (
     /\b(instalaci[oó]n|montaje|construcci[oó]n|pruebas?|puesta en servicio|mantenimiento|dise[nñ]o)\b/i.test(description)
         ? "service"
@@ -55,6 +96,8 @@ const inferCategory = (description: string): QuotationItemCategory => (
 );
 
 function parseSpreadsheetSheet(name: string, rows: unknown[][]): ParsedSpreadsheetSheet | null {
+    if (normalizedText(name) === "hoja1 (2)") return null;
+
     let headerIndex = -1;
     let columns: { quantity: number; unit: number; description: number; unitPrice: number } | null = null;
 
@@ -71,7 +114,39 @@ function parseSpreadsheetSheet(name: string, rows: unknown[][]): ParsedSpreadshe
         }
     }
 
-    if (!columns) return null;
+    if (!columns) {
+        const summaryItems: ImportedQuotationItem[] = [];
+        let lastRow = rows.length - 1;
+        while (lastRow >= 0 && !rows[lastRow].some((cell) => String(cell ?? "").trim())) {
+            lastRow -= 1;
+        }
+        for (let index = lastRow; index >= 0; index -= 1) {
+            const description = String(rows[index][2] ?? "").replace(/\s+/g, " ").trim();
+            const quantity = spreadsheetNumber(rows[index][3]);
+            if (!description || !quantity || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+                break;
+            }
+            summaryItems.push({
+                category: inferCategory(description),
+                description,
+                unit: /\b(perfil|cable|alambre|conductor|cinta led)\b/i.test(description)
+                    ? "m"
+                    : "unidad",
+                quantity,
+                unit_price: "",
+            });
+        }
+        if (summaryItems.length < 2) return null;
+        return {
+            name,
+            items: summaryItems.reverse(),
+            skippedTaxRows: 0,
+            skippedLaborRows: 0,
+            taxPercent: null,
+            importsSummaryOnly: true,
+            metadata: extractSpreadsheetMetadata(rows),
+        };
+    }
 
     const items: ImportedQuotationItem[] = [];
     let skippedTaxRows = 0;
@@ -104,14 +179,21 @@ function parseSpreadsheetSheet(name: string, rows: unknown[][]): ParsedSpreadshe
         if (!quantity || !unitPrice || Number(quantity) <= 0 || Number(unitPrice) < 0 || !unit) continue;
         items.push({
             category: inferCategory(description),
-            description: description.slice(0, 255),
+            description,
             unit: unit.slice(0, 30),
             quantity,
             unit_price: unitPrice,
         });
     }
 
-    return { name, items, skippedTaxRows, skippedLaborRows, taxPercent };
+    return {
+        name,
+        items,
+        skippedTaxRows,
+        skippedLaborRows,
+        taxPercent,
+        metadata: extractSpreadsheetMetadata(rows),
+    };
 }
 
 const parseRows = (text: string): ImportedQuotationItem[] => {
@@ -154,7 +236,7 @@ const parseRows = (text: string): ImportedQuotationItem[] => {
         if (!quantity || !unit_price || Number(quantity) <= 0 || Number(unit_price) < 0) continue;
         rows.push({
             category: inferCategory(description),
-            description: description.slice(0, 255),
+            description,
             unit: unitMatch?.[1] ?? "unidad",
             quantity,
             unit_price,
@@ -243,13 +325,21 @@ export default function QuotationImport({ onApprove }: Props) {
     const [spreadsheetSheets, setSpreadsheetSheets] = useState<ParsedSpreadsheetSheet[]>([]);
     const [selectedSheet, setSelectedSheet] = useState("");
     const [importSummary, setImportSummary] = useState("");
+    const [selectedMetadata, setSelectedMetadata] = useState<ImportedQuotationMetadata>();
 
     const selectSheet = (sheetName: string, sheets = spreadsheetSheets) => {
         const selected = sheets.find((sheet) => sheet.name === sheetName);
         if (!selected) return;
         setSelectedSheet(selected.name);
         setRows(selected.items);
+        setSelectedMetadata(selected.metadata);
         const summary = [
+            selected.importsSummaryOnly
+                ? "Se importó el resumen final por producto. Las columnas de costos del Excel no se usan como precios de venta; completa el precio o el costo de cada partida."
+                : "",
+            Object.values(selected.metadata ?? {}).some(Boolean)
+                ? "Se detectaron datos del proyecto; los campos vacíos se completarán al aprobar."
+                : "",
             selected.taxPercent ? `IVA ${selected.taxPercent}% detectado y excluido; el sistema calculará el IVA una sola vez.` : "",
             selected.skippedTaxRows ? `${selected.skippedTaxRows} fila(s) de impuesto excluidas.` : "",
             selected.skippedLaborRows ? `${selected.skippedLaborRows} fila(s) explícitas de mano de obra excluidas del detalle para el cliente; registra ese costo en Mano de obra interna.` : "",
@@ -272,6 +362,7 @@ export default function QuotationImport({ onApprove }: Props) {
         setSpreadsheetSheets([]);
         setSelectedSheet("");
         setImportSummary("");
+        setSelectedMetadata(undefined);
         setProgress("Preparando archivo para lectura local…");
         try {
             if (extension === "xlsx" || extension === "xls") {
@@ -288,6 +379,9 @@ export default function QuotationImport({ onApprove }: Props) {
                     setSpreadsheetSheets(sheets);
                     selectSheet(sheets[0].name, sheets);
                     return;
+                }
+                if (workbook.SheetNames.some((name) => normalizedText(name) === "hoja1 (2)")) {
+                    throw new Error("La hoja “Hoja1 (2)” contiene costos internos, no precios de venta. Importa una de las pestañas con porcentaje de recargo (13%, 15%, 28% o 30%).");
                 }
                 throw new Error("No se encontraron columnas reconocibles de cantidad, unidad, descripción y precio unitario. Revisa el formato del Excel o conviértelo a una plantilla compatible.");
             }
@@ -354,7 +448,7 @@ export default function QuotationImport({ onApprove }: Props) {
                                 <input inputMode="decimal" value={row.quantity} onChange={(event) => updateRow(index, "quantity", event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm font-normal" />
                             </label>
                             <label className="text-xs font-semibold text-slate-600">Precio unitario
-                                <input inputMode="decimal" value={row.unit_price} onChange={(event) => updateRow(index, "unit_price", event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm font-normal" />
+                                <input inputMode="decimal" placeholder="Pendiente" value={row.unit_price} onChange={(event) => updateRow(index, "unit_price", event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm font-normal" />
                             </label>
                         </div>
                     ))}
@@ -365,14 +459,19 @@ export default function QuotationImport({ onApprove }: Props) {
                                 && row.unit.trim()
                                 && /^\d+(?:[.,]\d+)?$/.test(row.quantity.trim())
                                 && Number(row.quantity.replace(",", ".")) > 0
-                                && /^\d+(?:[.,]\d+)?$/.test(row.unit_price.trim())
-                                && Number(row.unit_price.replace(",", ".")) >= 0
+                                && (
+                                    !row.unit_price.trim()
+                                    || (
+                                        /^\d+(?:[.,]\d+)?$/.test(row.unit_price.trim())
+                                        && Number(row.unit_price.replace(",", ".")) >= 0
+                                    )
+                                )
                             );
                             if (validRows.length !== rows.length) {
-                                setError("Corrige todas las filas: descripción y unidad requeridas, cantidad mayor a cero y precio válido.");
+                                setError("Corrige las filas con descripción, unidad, cantidad mayor a cero y precio válido (o déjalo pendiente).");
                                 return;
                             }
-                            onApprove(rows);
+                            onApprove(rows, selectedMetadata);
                             setRows([]);
                             setProgress(`${validRows.length} fila(s) aprobada(s) y agregada(s) al formulario.`);
                         }} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">

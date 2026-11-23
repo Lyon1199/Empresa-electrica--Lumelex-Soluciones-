@@ -22,6 +22,10 @@ export interface QuotationItemPayload {
     unit: string;
     quantity: number;
     unit_price: number;
+    costing_enabled?: boolean;
+    internal_material_cost?: number;
+    internal_logistics_cost?: number;
+    internal_labor_entries?: InternalLaborEntry[];
 }
 
 export interface InternalLaborEntry {
@@ -37,6 +41,9 @@ export interface QuotationPayload {
     customer_identification?: string;
     customer_email?: string;
     customer_address?: string;
+    city?: string | null;
+    requester?: string | null;
+    payment_terms?: string | null;
     title: string;
     issue_date: string;
     valid_until: string;
@@ -46,6 +53,7 @@ export interface QuotationPayload {
     terms: string;
     discount_percent: number;
     tax_percent: number;
+    markup_percent?: number;
     internal_labor_enabled: boolean;
     internal_worker_count: number;
     internal_work_days: number;
@@ -54,10 +62,18 @@ export interface QuotationPayload {
     items: QuotationItemPayload[];
 }
 
-export interface QuotationItem extends QuotationItemPayload {
+export interface QuotationItem extends Omit<
+    QuotationItemPayload,
+    "quantity" | "unit_price" | "internal_material_cost" | "internal_logistics_cost"
+> {
     id: number;
     line_total: string;
     position: number;
+    quantity: number | string;
+    unit_price: number | string;
+    internal_material_cost?: number | string;
+    internal_logistics_cost?: number | string;
+    internal_labor_entries?: InternalLaborEntry[];
 }
 
 export interface Quotation {
@@ -68,6 +84,9 @@ export interface Quotation {
     customer_identification: string | null;
     customer_email: string | null;
     customer_address: string | null;
+    city: string | null;
+    requester: string | null;
+    payment_terms?: string | null;
     title: string;
     issue_date: string;
     valid_until: string;
@@ -83,6 +102,7 @@ export interface Quotation {
     tax_percent: string;
     tax_amount: string;
     total: string;
+    markup_percent?: string;
     internal_labor_enabled?: boolean;
     internal_worker_count?: number;
     internal_work_days?: string;

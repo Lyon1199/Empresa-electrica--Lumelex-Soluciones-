@@ -156,43 +156,49 @@ export const generateQuotationPdfBlob = async (quotation: Quotation): Promise<Bl
     y = addSectionTitle(pdf, "Datos del cliente y vigencia", y);
     const boxY = y - 5;
     pdf.setDrawColor(220, 226, 234);
-    pdf.roundedRect(margin, boxY, pageWidth - margin * 2, 29, 2, 2, "S");
+    pdf.roundedRect(margin, boxY, pageWidth - margin * 2, 37, 2, 2, "S");
 
     const columnX = 109;
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(8);
     pdf.setTextColor(...navy);
     pdf.text("CLIENTE", margin + 4, boxY + 6);
-    pdf.text("IDENTIFICACIÓN", margin + 4, boxY + 17);
+    pdf.text("IDENTIFICACIÓN", margin + 4, boxY + 18);
     pdf.text("VIGENCIA", columnX, boxY + 6);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(...slate);
     pdf.text(pdf.splitTextToSize(quotation.customer_name, 80), margin + 4, boxY + 11);
     if (quotation.customer_identification) {
-        pdf.text(quotation.customer_identification, margin + 4, boxY + 22);
+        pdf.text(quotation.customer_identification, margin + 4, boxY + 23);
     }
     pdf.text(
         `${formatDate(quotation.issue_date)} al ${formatDate(quotation.valid_until)}`,
         columnX,
         boxY + 12
     );
-    if (quotation.customer_email) {
-        pdf.setFontSize(8);
-        pdf.text(pdf.splitTextToSize(quotation.customer_email, 80), columnX, boxY + 20);
-    }
-    if (quotation.customer_address) {
-        pdf.setFontSize(8);
+    const projectDetails = [
+        quotation.city ? `CIUDAD: ${quotation.city}` : "",
+        quotation.requester ? `SOLICITANTE: ${quotation.requester}` : "",
+        quotation.customer_email ? `CORREO: ${quotation.customer_email}` : "",
+        quotation.customer_address ? `DIRECCIÓN: ${quotation.customer_address}` : "",
+    ].filter(Boolean);
+    if (projectDetails.length) {
+        pdf.setFontSize(7.5);
         pdf.text(
-            pdf.splitTextToSize(quotation.customer_address, 80),
+            pdf.splitTextToSize(projectDetails.join(" · "), pageWidth - columnX - margin - 4),
             columnX,
-            boxY + (quotation.customer_email ? 25 : 20)
+            boxY + 19
         );
     }
-    y = boxY + 36;
+    y = boxY + 44;
 
     if (quotation.scope) {
         y = addSectionTitle(pdf, "Alcance del trabajo", y);
         y = writeParagraph(pdf, quotation.scope, margin + 1, y, pageWidth - margin * 2 - 2) + 5;
+    }
+    if (quotation.payment_terms) {
+        y = addSectionTitle(pdf, "Condiciones de pago", y);
+        y = writeParagraph(pdf, quotation.payment_terms, margin + 1, y, pageWidth - margin * 2 - 2) + 5;
     }
 
     const categoryLabels: Record<string, string> = {
