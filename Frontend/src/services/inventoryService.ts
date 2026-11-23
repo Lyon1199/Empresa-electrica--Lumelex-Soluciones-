@@ -31,7 +31,7 @@ export interface InventoryProductPayload {
 
 export const getInventoryProducts = async () => {
     const response = await client.get<{ data: InventoryProduct[] }>("/inventory-products", {
-        params: { per_page: 100 },
+        params: { per_page: 500 },
     });
     return response.data.data;
 };

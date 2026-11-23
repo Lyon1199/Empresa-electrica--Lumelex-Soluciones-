@@ -84,6 +84,13 @@ const units = [
     { value: "m³", label: "Metro cúbico (m³)" },
     { value: "galón", label: "Galón" },
     { value: "paquete", label: "Paquete" },
+    { value: "kit", label: "Kit" },
+    { value: "tubo", label: "Tubo" },
+    { value: "rollo", label: "Rollo" },
+    { value: "par", label: "Par" },
+    { value: "metro", label: "Metro lineal" },
+    { value: "macho", label: "Macho" },
+    { value: "hembra", label: "Hembra" },
 ] as const;
 
 const toLocalDateValue = (date: Date) => {
@@ -233,6 +240,8 @@ function QuotationPage() {
     const [credentialsCopied, setCredentialsCopied] = useState(false);
     const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
     const [inventoryError, setInventoryError] = useState("");
+    const [inventorySearch, setInventorySearch] = useState("");
+    const [inventoryCategory, setInventoryCategory] = useState("");
 
     const itemsSubtotal = useMemo(
         () => form.items.reduce(
@@ -252,6 +261,30 @@ function QuotationPage() {
     const taxableAmount = Math.max(0, subtotal - discountAmount);
     const taxAmount = taxableAmount * parseUserNumber(form.tax_percent) / 100;
     const total = taxableAmount + taxAmount;
+
+    const inventoryCategories = useMemo(
+        () => Array.from(new Set(
+            inventoryProducts
+                .map((product) => product.category?.trim())
+                .filter((category): category is string => Boolean(category))
+        )).sort((a, b) => a.localeCompare(b, "es")),
+        [inventoryProducts]
+    );
+
+    const filteredInventoryProducts = useMemo(() => {
+        const query = inventorySearch.trim().toLocaleLowerCase();
+        return inventoryProducts.filter((product) => {
+            const matchesCategory = !inventoryCategory
+                || product.category === inventoryCategory;
+            const matchesSearch = !query || [
+                product.name,
+                product.sku ?? "",
+                product.description ?? "",
+                product.category ?? "",
+            ].some((value) => value.toLocaleLowerCase().includes(query));
+            return matchesCategory && matchesSearch;
+        });
+    }, [inventoryCategory, inventoryProducts, inventorySearch]);
 
     useEffect(() => {
         if (mode !== "list") return;
@@ -824,9 +857,27 @@ function QuotationPage() {
                                 <div key={index} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-12">
                                     <label className="text-xs font-semibold text-slate-600 md:col-span-12">
                                         Producto de inventario (opcional)
+                                        <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_220px]">
+                                            <input
+                                                value={inventorySearch}
+                                                onChange={(event) => setInventorySearch(event.target.value)}
+                                                placeholder="Buscar por nombre, SKU o descripción…"
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800"
+                                            />
+                                            <select
+                                                value={inventoryCategory}
+                                                onChange={(event) => setInventoryCategory(event.target.value)}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800"
+                                            >
+                                                <option value="">Todas las categorías</option>
+                                                {inventoryCategories.map((category) => (
+                                                    <option key={category} value={category}>{category}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <select value={item.product_id ?? ""} onChange={(event) => selectInventoryProduct(index, event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800">
                                             <option value="">Partida manual</option>
-                                            {inventoryProducts.map((product) => (
+                                            {filteredInventoryProducts.map((product) => (
                                                 <option key={product.id} value={product.id}>
                                                     {product.sku ? `${product.sku} · ` : ""}{product.name} — {money(product.unit_price)}
                                                 </option>

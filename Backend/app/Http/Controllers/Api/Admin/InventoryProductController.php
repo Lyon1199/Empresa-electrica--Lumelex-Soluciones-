@@ -21,7 +21,7 @@ class InventoryProductController extends Controller
             'category' => ['sometimes', 'string', 'max:100'],
             'low_stock' => ['sometimes', 'boolean'],
             'active' => ['sometimes', 'boolean'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:500'],
         ]);
 
         $query = InventoryProduct::query();
