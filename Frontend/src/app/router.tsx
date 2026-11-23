@@ -18,7 +18,6 @@ const WorkOrders = lazy(() => import("../pages/admin/WorkOrders"));
 const Reports = lazy(() => import("../pages/admin/Reports"));
 const Finance = lazy(() => import("../pages/admin/Finance"));
 const MailSettings = lazy(() => import("../pages/admin/MailSettings"));
-const ElectronicSignatureSettings = lazy(() => import("../pages/admin/ElectronicSignatureSettings"));
 const WorkerPortal = lazy(() => import("../pages/worker/WorkerPortal"));
 const CustomerPortal = lazy(() => import("../pages/customer/CustomerPortal"));
 const ChangePassword = lazy(() => import("../pages/customer/ChangePassword"));
@@ -60,9 +59,6 @@ function Router() {
                             <Route path="/admin/cotizaciones" element={<Quotations />} />
                             <Route path="/admin/proyectos" element={<Projects />} />
                             <Route path="/admin/finanzas" element={<Finance />} />
-                        </Route>
-                        <Route element={<ProtectedRoute allowedRoles={["admin", "gerente"]} />}>
-                            <Route path="/admin/firma-electronica" element={<ElectronicSignatureSettings />} />
                         </Route>
                         <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
                             <Route path="/admin/correo" element={<MailSettings />} />

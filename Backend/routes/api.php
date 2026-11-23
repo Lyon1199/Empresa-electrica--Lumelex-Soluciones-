@@ -244,11 +244,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/microsoft/activate', [MailSettingsController::class, 'useMicrosoft']);
     });
 
-    Route::middleware('role:admin,gerente')->prefix('admin/electronic-signature-settings')->group(function () {
-        Route::get('/', [ElectronicSignatureSettingsController::class, 'show']);
-        Route::post('/', [ElectronicSignatureSettingsController::class, 'update']);
-    });
-
     Route::middleware('role:admin')->prefix('admin/users')->group(function () {
         Route::get('/', [UserController::class, 'index']);
         Route::post('/', [UserController::class, 'store']);

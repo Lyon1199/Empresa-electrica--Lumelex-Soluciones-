@@ -90,7 +90,9 @@ class QuotationController extends Controller
     ) {
         $result = DB::transaction(function () use ($request, $portalProvisioner) {
             $data = $request->validated();
-            $customer = Customer::findOrFail($data['customer_id']);
+            $customer = ! empty($data['customer_id'])
+                ? Customer::findOrFail($data['customer_id'])
+                : null;
             $quotation = new Quotation(
                 $this->quotationAttributes($data, $customer)
             );
@@ -209,38 +211,19 @@ class QuotationController extends Controller
 
     public function clone(Request $request, Quotation $quotation)
     {
-        $data = $request->validate([
-            'customer_id' => [
-                'required',
-                'integer',
-                Rule::exists('customers', 'id')->where('active', true),
-            ],
-        ]);
-
-        $customer = Customer::findOrFail($data['customer_id']);
-        $copy = DB::transaction(function () use ($quotation, $customer, $request) {
+        $copy = DB::transaction(function () use ($quotation, $request) {
             $copy = $quotation->replicate([
                 'id',
                 'number',
                 'created_at',
                 'updated_at',
                 'status',
-                'customer_id',
-                'customer_name',
-                'customer_identification',
-                'customer_email',
-                'customer_address',
                 'created_by',
                 'subtotal',
                 'discount_amount',
                 'tax_amount',
                 'total',
             ]);
-            $copy->customer_id = $customer->id;
-            $copy->customer_name = $customer->name;
-            $copy->customer_identification = $customer->identification;
-            $copy->customer_email = $customer->email;
-            $copy->customer_address = $customer->address;
             $copy->status = 'draft';
             $copy->created_by = $request->user()?->id;
             $copy->save();
@@ -294,7 +277,9 @@ class QuotationController extends Controller
                 abort(422, 'Usa la acción de enviar cotización por correo para marcarla como enviada.');
             }
 
-            $customer = Customer::findOrFail($data['customer_id']);
+            $customer = ! empty($data['customer_id'])
+                ? Customer::findOrFail($data['customer_id'])
+                : null;
 
             $quotation->update(
                 $this->quotationAttributes($data, $customer)
@@ -335,16 +320,24 @@ class QuotationController extends Controller
         ]);
     }
 
-    private function quotationAttributes(array $data, Customer $customer): array
+    private function quotationAttributes(array $data, ?Customer $customer): array
     {
         $internalLaborEnabled = (bool) ($data['internal_labor_enabled'] ?? false);
 
         return [
-            'customer_id' => $customer->id,
-            'customer_name' => $customer->name,
-            'customer_identification' => $customer->identification,
-            'customer_email' => $customer->email,
-            'customer_address' => $customer->address,
+            'customer_id' => $customer?->id,
+            'customer_name' => $customer
+                ? $customer->name
+                : ($data['customer_name'] ?? 'Cliente general'),
+            'customer_identification' => $customer
+                ? $customer->identification
+                : ($data['customer_identification'] ?? null),
+            'customer_email' => $customer
+                ? $customer->email
+                : ($data['customer_email'] ?? null),
+            'customer_address' => $customer
+                ? $customer->address
+                : ($data['customer_address'] ?? null),
             'title' => $data['title'],
             'issue_date' => $data['issue_date'],
             'valid_until' => $data['valid_until'],

@@ -16,11 +16,14 @@ class UpdateQuotationRequest extends FormRequest
     {
         return [
             'customer_id' => [
-                'required',
+                'nullable',
                 'integer',
-                Rule::exists('customers', 'id')
-                    ->where('active', true),
+                Rule::exists('customers', 'id')->where('active', true),
             ],
+            'customer_name' => ['nullable', 'string', 'max:180'],
+            'customer_identification' => ['nullable', 'string', 'max:30'],
+            'customer_email' => ['nullable', 'email', 'max:180'],
+            'customer_address' => ['nullable', 'string', 'max:500'],
             'title' => ['required', 'string', 'max:180'],
             'issue_date' => ['required', 'date'],
             'valid_until' => ['required', 'date', 'after_or_equal:issue_date'],

@@ -21,6 +21,10 @@ class CustomerPortalProvisioner
             throw new RuntimeException('Solo se pueden convertir cotizaciones aceptadas.');
         }
 
+        if (! $quotation->customer_id) {
+            return ['project' => null, 'credentials' => null];
+        }
+
         $customer = Customer::query()
             ->lockForUpdate()
             ->findOrFail($quotation->customer_id);

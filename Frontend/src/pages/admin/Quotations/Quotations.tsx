@@ -8,10 +8,6 @@ import {
 } from "../../../services/inventoryService";
 
 import {
-    getCustomers,
-    type Customer,
-} from "../../../services/customerService";
-import {
     createQuotation,
     cloneQuotation,
     deleteQuotation,
@@ -113,7 +109,11 @@ const emptyItem = () => ({
 });
 
 const emptyQuotation = (): QuotationForm => ({
-    customer_id: 0,
+    customer_id: null,
+    customer_name: "",
+    customer_identification: "",
+    customer_email: "",
+    customer_address: "",
     title: "",
     issue_date: today(),
     valid_until: dateAfter(30),
@@ -225,11 +225,6 @@ function QuotationPage() {
     const [quotation, setQuotation] = useState<Quotation | null>(null);
     const [form, setForm] = useState<QuotationForm>(emptyQuotation);
     const [editingId, setEditingId] = useState<number | null>(null);
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [customerSearch, setCustomerSearch] = useState("");
-    const [customerLoading, setCustomerLoading] = useState(false);
-    const [customerError, setCustomerError] = useState("");
-    const [showCustomerOptions, setShowCustomerOptions] = useState(false);
     const [statusSaving, setStatusSaving] = useState(false);
     const [pdfDownloading, setPdfDownloading] = useState(false);
     const [nextStatus, setNextStatus] = useState<QuotationStatus>("draft");
@@ -238,10 +233,6 @@ function QuotationPage() {
     const [credentialsCopied, setCredentialsCopied] = useState(false);
     const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
     const [inventoryError, setInventoryError] = useState("");
-    const [cloneOpen, setCloneOpen] = useState(false);
-    const [cloneCustomers, setCloneCustomers] = useState<Customer[]>([]);
-    const [cloneCustomerId, setCloneCustomerId] = useState("");
-    const [cloneSaving, setCloneSaving] = useState(false);
 
     const itemsSubtotal = useMemo(
         () => form.items.reduce(
@@ -261,9 +252,6 @@ function QuotationPage() {
     const taxableAmount = Math.max(0, subtotal - discountAmount);
     const taxAmount = taxableAmount * parseUserNumber(form.tax_percent) / 100;
     const total = taxableAmount + taxAmount;
-    const selectedCustomer = customers.find(
-        (customer) => customer.id === form.customer_id
-    );
 
     useEffect(() => {
         if (mode !== "list") return;
@@ -294,37 +282,6 @@ function QuotationPage() {
         };
     }, [mode, page, search, statusFilter]);
 
-    useEffect(() => {
-        if (mode !== "form") return;
-        let mounted = true;
-        const timer = window.setTimeout(async () => {
-            try {
-                setCustomerLoading(true);
-                setCustomerError("");
-                const result = await getCustomers(
-                    customerSearch.trim() || undefined,
-                    undefined,
-                    100,
-                    true
-                );
-                if (mounted) setCustomers(result.data ?? []);
-            } catch (loadError) {
-                console.error("Error buscando clientes para cotizar:", loadError);
-                if (mounted) {
-                    setCustomerError(
-                        responseMessage(loadError, "No se pudieron cargar los clientes.")
-                    );
-                }
-            } finally {
-                if (mounted) setCustomerLoading(false);
-            }
-        }, customerSearch ? 250 : 0);
-
-        return () => {
-            mounted = false;
-            window.clearTimeout(timer);
-        };
-    }, [customerSearch, mode]);
 
     useEffect(() => {
         if (mode !== "form") return;
@@ -351,7 +308,6 @@ function QuotationPage() {
         setPortalCredentials(null);
         setCredentialsCopied(false);
         setForm(emptyQuotation());
-        setCustomerSearch("");
         setError("");
         setMode("form");
     };
@@ -361,24 +317,12 @@ function QuotationPage() {
         setQuotation(item);
         setPortalCredentials(null);
         setCredentialsCopied(false);
-        setCustomers((current) => current.some((customer) => customer.id === item.customer_id)
-            ? current
-            : [
-                {
-                    id: item.customer_id,
-                    name: item.customer_name,
-                    customer_type: "person",
-                    identification: item.customer_identification,
-                    email: item.customer_email ?? undefined,
-                    address: item.customer_address ?? undefined,
-                    active: true,
-                    created_at: item.created_at,
-                    updated_at: item.updated_at,
-                },
-                ...current,
-            ]);
         setForm({
             customer_id: item.customer_id,
+            customer_name: item.customer_name === "Cliente general" ? "" : item.customer_name,
+            customer_identification: item.customer_identification ?? "",
+            customer_email: item.customer_email ?? "",
+            customer_address: item.customer_address ?? "",
             title: item.title,
             issue_date: item.issue_date.slice(0, 10),
             valid_until: item.valid_until.slice(0, 10),
@@ -401,7 +345,6 @@ function QuotationPage() {
                 unit_price: numberInputValue(unit_price),
             })),
         });
-        setCustomerSearch(item.customer_name);
         setError("");
         setMode("form");
     };
@@ -423,45 +366,25 @@ function QuotationPage() {
         }
     };
 
-    const openCloneDialog = async () => {
+    const handleClone = async () => {
         if (!quotation) return;
         try {
             setError("");
-            const result = await getCustomers(undefined, undefined, 100, true);
-            setCloneCustomers(result.data ?? []);
-            setCloneCustomerId("");
-            setCloneOpen(true);
-        } catch (loadError) {
-            setError(responseMessage(loadError, "No se pudieron cargar los clientes para clonar."));
-        }
-    };
-
-    const handleClone = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        if (!quotation || !cloneCustomerId) return;
-        try {
-            setCloneSaving(true);
-            setError("");
-            const copy = await cloneQuotation(quotation.id, Number(cloneCustomerId));
+            setSaving(true);
+            const copy = await cloneQuotation(quotation.id);
             setQuotation(copy);
             setNextStatus(copy.status);
-            setPortalCredentials(null);
-            setCloneOpen(false);
             setMode("detail");
             setPage(1);
-        } catch (cloneError) {
-            setError(responseMessage(cloneError, "No se pudo clonar la cotización."));
+        } catch (loadError) {
+            setError(responseMessage(loadError, "No se pudo clonar la cotización."));
         } finally {
-            setCloneSaving(false);
+            setSaving(false);
         }
     };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        if (!form.customer_id) {
-            setError("Selecciona un cliente para la cotización.");
-            return;
-        }
         if (form.items.some((item) =>
             !item.description.trim()
             || !item.unit.trim()
@@ -542,6 +465,10 @@ function QuotationPage() {
             setNotice("");
             const payload: QuotationPayload = {
                 customer_id: quotation.customer_id,
+                customer_name: quotation.customer_name,
+                customer_identification: quotation.customer_identification ?? "",
+                customer_email: quotation.customer_email ?? "",
+                customer_address: quotation.customer_address ?? "",
                 title: quotation.title,
                 issue_date: quotation.issue_date.slice(0, 10),
                 valid_until: quotation.valid_until.slice(0, 10),
@@ -833,62 +760,24 @@ function QuotationPage() {
             {mode === "form" && (
                 <form onSubmit={handleSubmit} className="space-y-5">
                     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 className="mb-4 font-semibold text-slate-900">Cliente y datos de la propuesta</h2>
+                        <h2 className="mb-4 font-semibold text-slate-900">Datos del destinatario y de la propuesta</h2>
                         <div className="grid gap-4 md:grid-cols-2">
-                            <div className="relative md:col-span-2">
-                                <label htmlFor="quotation-customer" className="mb-2 block text-sm font-semibold text-slate-700">Cliente *</label>
-                                <input
-                                    id="quotation-customer"
-                                    required={!form.customer_id}
-                                    value={selectedCustomer ? `${selectedCustomer.name} · ${selectedCustomer.identification}` : customerSearch}
-                                    onChange={(event) => {
-                                        setCustomerSearch(event.target.value);
-                                        if (form.customer_id) updateForm("customer_id", 0);
-                                        setShowCustomerOptions(true);
-                                    }}
-                                    onFocus={() => setShowCustomerOptions(true)}
-                                    placeholder="Buscar por nombre o identificación…"
-                                    autoComplete="off"
-                                    className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-amber-500"
-                                />
-                                {showCustomerOptions && !form.customer_id && (
-                                    <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                                        {customerLoading ? (
-                                            <p className="p-4 text-sm text-slate-500">Buscando clientes…</p>
-                                        ) : customers.length ? customers.map((customer) => (
-                                            <button
-                                                key={customer.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    updateForm("customer_id", customer.id);
-                                                    setCustomerSearch(customer.name);
-                                                    setShowCustomerOptions(false);
-                                                }}
-                                                className="block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-amber-50"
-                                            >
-                                                <span className="block text-sm font-semibold text-slate-800">{customer.name}</span>
-                                                <span className="text-xs text-slate-500">{customer.identification}{customer.customer_type === "company" ? " · Empresa" : " · Persona"}</span>
-                                            </button>
-                                        )) : (
-                                            <p className="p-4 text-sm text-slate-500">No se encontraron clientes activos.</p>
-                                        )}
-                                    </div>
-                                )}
-                                {customerError && <p className="mt-2 text-sm text-red-600">{customerError}</p>}
-                                {form.customer_id > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            updateForm("customer_id", 0);
-                                            setCustomerSearch("");
-                                            setShowCustomerOptions(true);
-                                        }}
-                                        className="mt-2 text-xs font-semibold text-amber-700 hover:text-amber-900"
-                                    >
-                                        Cambiar cliente
-                                    </button>
-                                )}
-                            </div>
+                            <label className="text-sm font-semibold text-slate-700">
+                                Nombre del destinatario
+                                <input maxLength={180} value={form.customer_name} onChange={(event) => updateForm("customer_name", event.target.value)} placeholder="Opcional" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
+                            <label className="text-sm font-semibold text-slate-700">
+                                Identificación
+                                <input maxLength={30} value={form.customer_identification} onChange={(event) => updateForm("customer_identification", event.target.value)} placeholder="Opcional" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
+                            <label className="text-sm font-semibold text-slate-700">
+                                Correo electrónico
+                                <input type="email" maxLength={180} value={form.customer_email} onChange={(event) => updateForm("customer_email", event.target.value)} placeholder="Opcional" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
+                            <label className="text-sm font-semibold text-slate-700">
+                                Dirección
+                                <input maxLength={500} value={form.customer_address} onChange={(event) => updateForm("customer_address", event.target.value)} placeholder="Opcional" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
+                            </label>
                             <label className="text-sm font-semibold text-slate-700">
                                 Título de la cotización *
                                 <input required maxLength={180} value={form.title} onChange={(event) => updateForm("title", event.target.value)} placeholder="Ej. Instalación eléctrica residencial" className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 font-normal outline-none focus:border-amber-500" />
@@ -1131,7 +1020,7 @@ function QuotationPage() {
                                 <button onClick={() => void handleDownloadPdf()} disabled={pdfDownloading} className="rounded-lg border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50">
                                     {pdfDownloading ? "Generando PDF…" : "Descargar PDF"}
                                 </button>
-                                <button onClick={() => void openCloneDialog()} className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-100">Clonar a otro cliente</button>
+                                <button onClick={() => void handleClone()} disabled={saving} className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-100 disabled:opacity-50">Clonar cotización</button>
                                 <button onClick={() => beginEdit(quotation)} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">Editar</button>
                                 {["draft", "rejected", "cancelled"].includes(quotation.status) && (
                                     <button onClick={() => void handleDelete()} disabled={saving} className="rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">Eliminar</button>
@@ -1143,7 +1032,7 @@ function QuotationPage() {
                     <section className="grid gap-5 lg:grid-cols-[1fr_320px]">
                         <div className="space-y-5">
                             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                                <h2 className="font-semibold text-slate-900">Cliente</h2>
+                                <h2 className="font-semibold text-slate-900">Destinatario</h2>
                                 <p className="mt-3 font-medium text-slate-800">{quotation.customer_name}</p>
                                 <p className="text-sm text-slate-500">Identificación: {quotation.customer_identification}</p>
                                 {quotation.customer_email && <p className="text-sm text-slate-500">{quotation.customer_email}</p>}
@@ -1213,31 +1102,6 @@ function QuotationPage() {
                 </div>
             )}
 
-            {cloneOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-                    <form onSubmit={(event) => void handleClone(event)} className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl">
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-900">Clonar cotización</h2>
-                            <p className="mt-1 text-sm text-slate-600">Crea una nueva cotización con las mismas partidas y datos comerciales para otro cliente.</p>
-                        </div>
-                        <label className="block text-sm font-semibold text-slate-700">Cliente destino *
-                            <select required value={cloneCustomerId} onChange={(event) => setCloneCustomerId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3 font-normal">
-                                <option value="">Selecciona un cliente…</option>
-                                {cloneCustomers.filter((customer) => customer.id !== quotation?.customer_id).map((customer) => (
-                                    <option key={customer.id} value={customer.id}>{customer.name} · {customer.identification}{customer.id === quotation?.customer_id ? " (cliente actual)" : ""}</option>
-                                ))}
-                            </select>
-                            {cloneCustomers.every((customer) => customer.id === quotation?.customer_id) && (
-                                <span className="mt-2 block text-xs font-normal text-amber-800">No hay otros clientes activos disponibles para clonar.</span>
-                            )}
-                        </label>
-                        <div className="flex justify-end gap-3">
-                            <button type="button" onClick={() => setCloneOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-700">Cancelar</button>
-                            <button disabled={cloneSaving || !cloneCustomerId} className="rounded-lg bg-blue-700 px-4 py-2.5 font-semibold text-white disabled:opacity-50">{cloneSaving ? "Clonando…" : "Crear copia"}</button>
-                        </div>
-                    </form>
-                </div>
-            )}
         </div>
     );
 }

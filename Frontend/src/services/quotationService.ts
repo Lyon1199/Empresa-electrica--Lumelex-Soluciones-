@@ -25,7 +25,11 @@ export interface QuotationItemPayload {
 }
 
 export interface QuotationPayload {
-    customer_id: number;
+    customer_id?: number | null;
+    customer_name?: string;
+    customer_identification?: string;
+    customer_email?: string;
+    customer_address?: string;
     title: string;
     issue_date: string;
     valid_until: string;
@@ -51,9 +55,9 @@ export interface QuotationItem extends QuotationItemPayload {
 export interface Quotation {
     id: number;
     number: string;
-    customer_id: number;
+    customer_id: number | null;
     customer_name: string;
-    customer_identification: string;
+    customer_identification: string | null;
     customer_email: string | null;
     customer_address: string | null;
     title: string;
@@ -149,9 +153,8 @@ export const deleteQuotation = async (id: number): Promise<void> => {
 };
 
 export const cloneQuotation = async (
-    id: number,
-    customer_id: number
+    id: number
 ): Promise<Quotation> => {
-    const response = await client.post(`/quotations/${id}/clone`, { customer_id });
+    const response = await client.post(`/quotations/${id}/clone`);
     return response.data.data;
 };
